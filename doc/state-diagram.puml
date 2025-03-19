@@ -1,0 +1,30 @@
+@startuml state-diagram
+
+hide empty description
+
+[*] --> ManualDriving
+
+state "Manual Driving" as ManualDriving
+ManualDriving ------> LaneKeeping : engages lane keeping
+
+state "Lane Keeping" as LaneKeeping {
+    [*] --> NoDrowsinessDetected
+    
+    state "No Drowsiness Detected" as NoDrowsinessDetected
+    NoDrowsinessDetected -r-> DrowsinessDetected : drowsiness detected
+
+    state "Drowsiness Detected" as DrowsinessDetected
+    DrowsinessDetected -l-> NoDrowsinessDetected : no drowsiness detected
+    DrowsinessDetected -r-> SearchPullOverSpot : after X seconds
+
+    state "Search Pull Over Spot" as SearchPullOverSpot
+    SearchPullOverSpot --> PullingOver
+}
+LaneKeeping ---> ManualDriving : disengage lane keeping
+
+state "Pulling Over" as PullingOver
+PullingOver --> Stopped
+
+state Stopped
+
+@enduml
