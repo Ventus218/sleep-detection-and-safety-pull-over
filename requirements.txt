@@ -1,0 +1,7 @@
+carla
+numpy
+psutil
+py-cpuinfo
+pygame
+opencv-python
+dlib
