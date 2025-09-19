@@ -37,6 +37,8 @@ state "Pulling Over" as PullingOver {
     EmergencyLaneReached : do / slow down
 }
 PullingOver -u-> ManualDriving : manual driving button pressed
+
 state Stopped
+Stopped -u-> ManualDriving : manual driving button pressed
 
 @enduml
