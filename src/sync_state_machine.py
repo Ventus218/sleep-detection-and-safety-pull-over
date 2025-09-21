@@ -1,6 +1,5 @@
 from abc import ABC
-from enum import StrEnum, auto
-from typing import final, override
+from typing import final
 
 
 class SyncStateMachine[State](ABC):
@@ -40,13 +39,14 @@ class SyncStateMachine[State](ABC):
         next_state = self.next_state(dt)
         if next_state is not None:
             self.on_exit(dt)
+            curr_state = self.state()
             self.__is_transitioning = True
-            self.on_state_transition(dt, self.state(), next_state)
+            self.on_state_transition(dt, curr_state, next_state)
             self.__is_transitioning = False
+            self.__state = next_state
             self.on_entry(dt)
         self.on_do(dt)
 
     def __init__(self, initial_state: State):
         self.__state = initial_state
         self.on_entry(dt=0)
-
