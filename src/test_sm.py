@@ -1,53 +1,77 @@
 from time import sleep
 from typing import override
-from enum import StrEnum, auto
-from sync_state_machine import SyncStateMachine
+from sync_state_machine import State, SyncStateMachine, Transition
 
-class State(StrEnum):
-    MANUAL = auto()
-    LANE_KEEPING = auto()
-    PULLING_OVER = auto()
-    STOPPED = auto()
 
-class Vehcle(SyncStateMachine[State]):
-    speed: float = 0
+class CarData:
+    speed: float
 
-    def __init__(self):
-        super().__init__(State.MANUAL)
+    def __init__(self, speed: float):
+        self.speed = speed
+
+
+class ManualState(State[CarData]):
+    @override
+    def on_do(self, dt: float, data: CarData) -> CarData:
+        data.speed = data.speed + 10 * dt
+        return data
 
     @override
-    def on_do(self, dt: float) -> None:
-        match self.state():
-            case State.MANUAL:
-                self.speed = self.speed + 10 * dt
-            case State.LANE_KEEPING:
-                pass
-            case State.PULLING_OVER:
-                self.speed = self.speed - 10 * dt
-            case State.STOPPED:
-                pass
-        print(self.speed)
-    
+    def transitions(self) -> list[Transition[CarData]]:
+        return [
+            Transition[CarData](
+                to=lambda: LaneKeepingState(),
+                condition=lambda data: data.speed > 50,
+                action=lambda data: (print("Transitioning to LaneKeeping"), data)[1],
+            )
+        ]
+
+
+class LaneKeepingState(State[CarData]):
     @override
-    def next_state(self, dt: float) -> State | None:
-        print(self.state())
-        match self.state():
-            case State.MANUAL:
-                if self.speed > 50:
-                    print("sos")
-                    return State.LANE_KEEPING
-            case State.LANE_KEEPING:
-                pass
-            case State.PULLING_OVER:
-                if self.speed <= 0:
-                    return State.STOPPED
-            case State.STOPPED:
-                pass
+    def on_do(self, dt: float, data: CarData) -> CarData:
+        data.speed = data.speed + 1 * dt
+        return data
+
+    @override
+    def transitions(self) -> list[Transition[CarData]]:
+        return [
+            Transition[CarData](
+                to=lambda: PullingOverState(),
+                condition=lambda data: data.speed > 55,
+                action=lambda data: (print("Transitioning to PullingOver"), data)[1],
+            )
+        ]
+
+
+class PullingOverState(State[CarData]):
+    @override
+    def on_do(self, dt: float, data: CarData) -> CarData:
+        data.speed = data.speed - 10 * dt
+        return data
+
+    @override
+    def transitions(self) -> list[Transition[CarData]]:
+        return [
+            Transition[CarData](
+                to=lambda: StoppedState(),
+                condition=lambda data: data.speed <= 0,
+                action=lambda data: (print("Transitioning to Stopped"), data)[1],
+            )
+        ]
+
+
+class StoppedState(State[CarData]):
+    pass
+
+
+class VehicleSM(SyncStateMachine[CarData]):
+    def __init__(self, data: CarData):
+        super().__init__(ManualState(), data)
 
 
 if __name__ == "__main__":
-    vehicle = Vehcle()
+    vehicle = VehicleSM(CarData(speed=30))
     while True:
         sleep(0.1)
-        vehicle.step(0.1)
-
+        print(vehicle.step(0.1).speed)
