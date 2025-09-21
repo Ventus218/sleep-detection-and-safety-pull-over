@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC
-from typing import Protocol, final
+from typing import Protocol, cast, final, override
 
 
 class Condition[Data](Protocol):
@@ -34,6 +34,9 @@ class Transition[Data]:
 
 
 class State[Data](ABC):
+    def parent(self) -> State[Data] | None:
+        return None
+
     def on_entry(self, dt: float, data: Data) -> Data:  # pyright: ignore[reportUnusedParameter]
         return data
 
@@ -46,6 +49,36 @@ class State[Data](ABC):
     def transitions(self) -> list[Transition[Data]]:
         return list()
 
+    @final
+    def parents(self) -> list[State[Data]]:
+        return __parents_rec(self, [])
+
+    # Equality just checks the type
+    @override
+    def __eq__(self, value: object, /) -> bool:
+        if not isinstance(value, State):
+            return NotImplemented
+        return type(self) is type(cast(State[Data], value))
+
+    @override
+    def __hash__(self) -> int:
+        return hash(type(self))
+
+
+def __parents_rec[D](child: State[D], acc: list[State[D]]) -> list[State[D]]:
+    match child.parent():
+        case None:
+            return acc
+        case parent:
+            return __parents_rec(parent, acc + [parent])
+
+
+def __lowest_common_ancestor[D](s1: State[D], s2: State[D]) -> State[D] | None:
+    parents_2 = set(s2.parents())
+    for p1 in s1.parents():
+        if parents_2.__contains__(p1):
+            return p1
+
 
 class SyncStateMachine[Data](ABC):
     __state: State[Data]
@@ -53,7 +86,11 @@ class SyncStateMachine[Data](ABC):
 
     def __init__(self, state: State[Data], data: Data):
         self.__state = state
-        self.__data = self.__state.on_entry(dt=0, data=data)
+        self.__data = data
+        dt = 0
+        for parent in list(reversed(state.parents())):
+            self.__data = parent.on_entry(dt, self.__data)
+        self.__data = self.__state.on_entry(dt, self.__data)
 
     @final
     def step(self, dt: float) -> Data:
@@ -61,9 +98,38 @@ class SyncStateMachine[Data](ABC):
             (t for t in self.__state.transitions() if t.condition(self.__data)), None
         )
         if transition is not None:
+            next_state = transition.make_next_state()
+            lca = __lowest_common_ancestor(self.__state, next_state)
+            print(
+                f"lca between {type(self.__state)} and {type(next_state)} is {type(lca)}"
+            )
+
+            # exit from state and from all parents up to the lowest common ancestor
             self.__data = self.__state.on_exit(dt, self.__data)
+            for p in self.__state.parents():
+                if lca is None or lca == p:
+                    break
+                else:
+                    self.__data = lca.on_exit(dt, self.__data)
+
             self.__data = transition.action(self.__data)
-            self.__state = transition.make_next_state()
+            self.__state = next_state
+
+            # entry into all parents down from the lowest common ancestor and then into state
+            reversed_ancestors = list(reversed(self.__state.parents()))
+            if lca is not None:
+                # removing lca and outer ancestor
+                while reversed_ancestors.pop(0) != lca:
+                    ...
+                for p in reversed_ancestors:
+                    self.__data = p.on_entry(dt, self.__data)
             self.__data = self.__state.on_entry(dt, self.__data)
+
+        # on_do for all parents down from the lowest common ancestor and then into state
+        for p in list(reversed(self.__state.parents())):
+            self.__data = p.on_do(dt, self.__data)
         self.__data = self.__state.on_do(dt, self.__data)
         return self.__data
+
+
+# TODO: rename parents and parents_rec into ancestors

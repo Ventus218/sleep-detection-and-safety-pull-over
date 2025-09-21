@@ -12,6 +12,10 @@ class CarData:
 
 class ManualState(State[CarData]):
     @override
+    def parent(self) -> State[CarData] | None:
+        return CarTurnerOnState()
+
+    @override
     def on_do(self, dt: float, data: CarData) -> CarData:
         data.speed = data.speed + 10 * dt
         return data
@@ -22,12 +26,15 @@ class ManualState(State[CarData]):
             Transition[CarData](
                 to=lambda: LaneKeepingState(),
                 condition=lambda data: data.speed > 50,
-                action=lambda data: (print("Transitioning to LaneKeeping"), data)[1],
             )
         ]
 
 
 class LaneKeepingState(State[CarData]):
+    @override
+    def parent(self) -> State[CarData] | None:
+        return CarTurnerOnState()
+
     @override
     def on_do(self, dt: float, data: CarData) -> CarData:
         data.speed = data.speed + 1 * dt
@@ -39,12 +46,16 @@ class LaneKeepingState(State[CarData]):
             Transition[CarData](
                 to=lambda: PullingOverState(),
                 condition=lambda data: data.speed > 55,
-                action=lambda data: (print("Transitioning to PullingOver"), data)[1],
+                action=lambda data: (print("WARNING: pulling over"), data)[1],
             )
         ]
 
 
 class PullingOverState(State[CarData]):
+    @override
+    def parent(self) -> State[CarData] | None:
+        return CarTurnerOnState()
+
     @override
     def on_do(self, dt: float, data: CarData) -> CarData:
         data.speed = data.speed - 10 * dt
@@ -56,20 +67,62 @@ class PullingOverState(State[CarData]):
             Transition[CarData](
                 to=lambda: StoppedState(),
                 condition=lambda data: data.speed <= 0,
-                action=lambda data: (print("Transitioning to Stopped"), data)[1],
             )
         ]
 
 
 class StoppedState(State[CarData]):
-    pass
+    @override
+    def parent(self) -> State[CarData] | None:
+        return CarTurnerOnState()
 
+    @override
+    def on_entry(self, dt: float, data: CarData) -> CarData:
+        data.speed = 0
+        return data
+
+
+class CarTurnerOnState(State[CarData]):
+    @override
+    def parent(self) -> State[CarData] | None:
+        return IAmACarState()
+    @override
+    def on_do(self, dt: float, data: CarData) -> CarData:
+        print(f"speed: {data.speed}")
+        return data
+
+    @override
+    def on_entry(self, dt: float, data: CarData) -> CarData:
+        print("entering: TurnedOnState")
+        return data
+
+    @override
+    def on_exit(self, dt: float, data: CarData) -> CarData:
+        print("exiting: TurnedOnState")
+        return data
+
+class IAmACarState(State[CarData]):
+    @override
+    def on_do(self, dt: float, data: CarData) -> CarData:
+        print("i am a car")
+        return data
+
+    @override
+    def on_entry(self, dt: float, data: CarData) -> CarData:
+        print("entering: IAmACarState")
+        return data
+
+    @override
+    def on_exit(self, dt: float, data: CarData) -> CarData:
+        print("exiting: IAmACarState")
+        return data
 
 class VehicleSM(SyncStateMachine[CarData]):
     def __init__(self, data: CarData):
         super().__init__(ManualState(), data)
 
 
+# TODO: timeout from stopped to car turned off
 if __name__ == "__main__":
     vehicle = VehicleSM(CarData(speed=30))
     while True:
