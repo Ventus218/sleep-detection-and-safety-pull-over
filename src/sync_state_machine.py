@@ -220,6 +220,10 @@ class Context[Timers]:
 
 class SyncStateMachine[Data, Timers](ABC):
     """
+    Type parametes:
+        Data: The type representing all the data that is part of the state machine
+        Timers: The type of the keys used to reference timers (suggestion: use an enum)
+
     The state machine lifecycle is the following:
         1. The state machine (when initialized) starts in the initial state with dt=0 and
            triggers on_entry callbacks
