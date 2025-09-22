@@ -1,7 +1,7 @@
 from enum import StrEnum, auto
 from time import sleep
 from typing import override
-from sync_state_machine import Context, State, SyncStateMachine, Transition
+from sync_state_machine import Context, State, StateAction, SyncStateMachine, Transition
 
 
 class CarTimers(StrEnum):
@@ -16,6 +16,9 @@ class CarData:
 
 
 class CarState(State[CarData, CarTimers]): ...
+
+
+class CarStateAction(StateAction[CarData, CarTimers]): ...
 
 
 class CarTransition(Transition[CarData, CarTimers]): ...
@@ -151,6 +154,15 @@ class IAmACarState(CarState):
     @override
     def on_exit(self, data: CarData, ctx: CarContext):
         print("exiting: IAmACarState")
+
+    @override
+    def actions(self) -> list[CarStateAction]:
+        return [
+            CarStateAction(
+                condition=lambda data, ctx: data.speed % 5 == 0,
+                action=lambda data, ctx: print("speed is a multiple of 5"),
+            )
+        ]
 
 
 class VehicleSM(SyncStateMachine[CarData, CarTimers]):

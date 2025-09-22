@@ -56,6 +56,29 @@ class Transition[Data, Timers]:
         self.action = action
 
 
+class StateAction[Data, Timers]:
+    """
+    An action that is performed when its condition evaluates to true (without changing the active state of the machine)
+    """
+
+    condition: Condition[Data, Timers]
+
+    action: Action[Data, Timers]
+
+    def __init__(
+        self,
+        condition: Condition[Data, Timers] = lambda data, ctx: True,
+        action: Action[Data, Timers] = lambda data, ctx: None,
+    ):
+        """
+        Args:
+            condition: condition what when evaluated to true will trigger the action
+            action: action to be executed once the condition is satisfied
+        """
+        self.condition = condition
+        self.action = action
+
+
 class State[Data, Timers](ABC):
     def parent(self) -> State[Data, Timers] | None:
         """
@@ -69,6 +92,13 @@ class State[Data, Timers](ABC):
         override this function to return the child to enter to on this state entry
         """
         return None
+
+    def actions(self) -> Sequence[StateAction[Data, Timers]]:
+        """
+        List of actions that this state can perform.
+        They will be executed in the same order they have beed defined.
+        """
+        return []
 
     def on_entry(self, data: Data, ctx: Context[Timers]):  # pyright: ignore[reportUnusedParameter]
         """
@@ -191,27 +221,40 @@ class Context[Timers]:
 class SyncStateMachine[Data, Timers](ABC):
     """
     The state machine lifecycle is the following:
-        1. The state machine (when initialized) starts in the initial state with dt=0 and triggers on_entry callbacks
+        1. The state machine (when initialized) starts in the initial state with dt=0 and
+           triggers on_entry callbacks
         2. Once for every step:
-            2a. Evaluates all the transition conditions of the active state (stopping at the first evaluating to True)
+            2a. Evaluates all the transition conditions of the active state (stopping at the
+                first evaluating to True)
             2b. Performs the transition if one is triggered:
                 2ba. Triggers the on_exit callbacks for the exiting state
                 2bb. Executes the transition action (if defined)
                 2bc. Sets the current state as the one defined by the transition
                 2bd. Triggers the on_entry callbacks for the entering state
-            2c. Triggers on_do callbacks
+            2c. Executes all the active state actions which conditions are satisfied
+            2d. For each ancestor of the active state and for the active state itself
+                2da. Check and execute state actions
+                2db. Triggers on_do callbacks
 
     Concepts to take into consideration:
         1. When entering a state the machine will call on_entry on every one of its ancestors
            from the outermost to the innermost and then on the state itself.
            When transitioning between two states the on_entry is called starting by the lowest
            common ancestor.
-        2. During each step the on_do callback will be called for each of the active state
-           ancestors from the outermost to the innermost an then for the active state itself.
-        2. When exiting a state the machine will call on_exit on the state itself and then on
+        2. During each step the on_do callback and any eventual state action will be called for
+           each of the active state ancestors from the outermost to the innermost an then for
+           the active state itself.
+           Example:
+               State A is an ancestor of state B
+               1. execute actions of state A
+               2. trigger on_do for state A
+               3. execute actions of state B
+               4. trigger on_do for state B
+        3. When exiting a state the machine will call on_exit on the state itself and then on
            every one of its ancestors from the innermost to the outermost.
            When transitioning between two state the on_exit is called up to the lowest common
            ancestor (excluded).
+        4. State actions are executed in the order they were defined by the state
     """
 
     _state: State[Data, Timers]
@@ -278,8 +321,11 @@ class SyncStateMachine[Data, Timers](ABC):
                     ...
             self._entry_states(reversed_ancestors + [self._state], self._context)
 
-        # on_do for all ancestors down from the lowest common ancestor and then into state
+        # on_do and state actions for all ancestors down from the lowest common ancestor and then into state
         for p in list(reversed(self._state.ancestors())):
+            for a in p.actions():
+                if a.condition(self._data, self._context):
+                    a.action(self._data, self._context)
             p.on_do(self._data, self._context)
         self._state.on_do(self._data, self._context)
 
