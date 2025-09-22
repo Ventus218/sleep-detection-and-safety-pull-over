@@ -37,6 +37,9 @@ class State[Data](ABC):
     def parent(self) -> State[Data] | None:
         return None
 
+    def entry_child(self) -> State[Data] | None:
+        return None
+
     def on_entry(self, dt: float, data: Data) -> Data:  # pyright: ignore[reportUnusedParameter]
         return data
 
@@ -51,7 +54,7 @@ class State[Data](ABC):
 
     @final
     def ancestors(self) -> list[State[Data]]:
-        return __ancestors_rec(self, [])
+        return _ancestors_rec(self, [])
 
     # Equality just checks the type
     @override
@@ -65,19 +68,27 @@ class State[Data](ABC):
         return hash(type(self))
 
 
-def __ancestors_rec[D](child: State[D], acc: list[State[D]]) -> list[State[D]]:
+def _ancestors_rec[D](child: State[D], acc: list[State[D]]) -> list[State[D]]:
     match child.parent():
         case None:
             return acc
         case parent:
-            return __ancestors_rec(parent, acc + [parent])
+            return _ancestors_rec(parent, acc + [parent])
 
 
-def __lowest_common_ancestor[D](s1: State[D], s2: State[D]) -> State[D] | None:
+def _lowest_common_ancestor[D](s1: State[D], s2: State[D]) -> State[D] | None:
     ancestors_2 = set(s2.ancestors())
     for p1 in s1.ancestors():
         if ancestors_2.__contains__(p1):
             return p1
+
+
+def _lowest_entry_child[D](s: State[D]) -> State[D]:
+    entry_child = s.entry_child()
+    if entry_child is None:
+        return s
+    else:
+        return _lowest_entry_child(entry_child)
 
 
 class SyncStateMachine[Data](ABC):
@@ -85,12 +96,17 @@ class SyncStateMachine[Data](ABC):
     __data: Data
 
     def __init__(self, state: State[Data], data: Data):
-        self.__state = state
+        self.__state = _lowest_entry_child(state)
         self.__data = data
         dt = 0
-        for ancestor in list(reversed(state.ancestors())):
-            self.__data = ancestor.on_entry(dt, self.__data)
-        self.__data = self.__state.on_entry(dt, self.__data)
+        self.__data = self.__entry_states(
+            dt, list(reversed(self.__state.ancestors())) + [self.__state]
+        )
+
+    def __entry_states(self, dt: float, states: list[State[Data]]) -> Data:
+        for s in states:
+            self.__data = s.on_entry(dt, self.__data)
+        return self.__data
 
     @final
     def step(self, dt: float) -> Data:
@@ -99,10 +115,8 @@ class SyncStateMachine[Data](ABC):
         )
         if transition is not None:
             next_state = transition.make_next_state()
-            lca = __lowest_common_ancestor(self.__state, next_state)
-            print(
-                f"lca between {type(self.__state)} and {type(next_state)} is {type(lca)}"
-            )
+            next_state = _lowest_entry_child(next_state)
+            lca = _lowest_common_ancestor(self.__state, next_state)
 
             # exit from state and from all ancestors up to the lowest common ancestor
             self.__data = self.__state.on_exit(dt, self.__data)
@@ -121,9 +135,7 @@ class SyncStateMachine[Data](ABC):
                 # removing lca and outer ancestor
                 while reversed_ancestors.pop(0) != lca:
                     ...
-                for p in reversed_ancestors:
-                    self.__data = p.on_entry(dt, self.__data)
-            self.__data = self.__state.on_entry(dt, self.__data)
+            self.__data = self.__entry_states(dt, reversed_ancestors + [self.__state])
 
         # on_do for all ancestors down from the lowest common ancestor and then into state
         for p in list(reversed(self.__state.ancestors())):
