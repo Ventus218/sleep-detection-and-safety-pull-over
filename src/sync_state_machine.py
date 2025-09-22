@@ -50,8 +50,8 @@ class State[Data](ABC):
         return list()
 
     @final
-    def parents(self) -> list[State[Data]]:
-        return __parents_rec(self, [])
+    def ancestors(self) -> list[State[Data]]:
+        return __ancestors_rec(self, [])
 
     # Equality just checks the type
     @override
@@ -65,18 +65,18 @@ class State[Data](ABC):
         return hash(type(self))
 
 
-def __parents_rec[D](child: State[D], acc: list[State[D]]) -> list[State[D]]:
+def __ancestors_rec[D](child: State[D], acc: list[State[D]]) -> list[State[D]]:
     match child.parent():
         case None:
             return acc
         case parent:
-            return __parents_rec(parent, acc + [parent])
+            return __ancestors_rec(parent, acc + [parent])
 
 
 def __lowest_common_ancestor[D](s1: State[D], s2: State[D]) -> State[D] | None:
-    parents_2 = set(s2.parents())
-    for p1 in s1.parents():
-        if parents_2.__contains__(p1):
+    ancestors_2 = set(s2.ancestors())
+    for p1 in s1.ancestors():
+        if ancestors_2.__contains__(p1):
             return p1
 
 
@@ -88,8 +88,8 @@ class SyncStateMachine[Data](ABC):
         self.__state = state
         self.__data = data
         dt = 0
-        for parent in list(reversed(state.parents())):
-            self.__data = parent.on_entry(dt, self.__data)
+        for ancestor in list(reversed(state.ancestors())):
+            self.__data = ancestor.on_entry(dt, self.__data)
         self.__data = self.__state.on_entry(dt, self.__data)
 
     @final
@@ -104,9 +104,9 @@ class SyncStateMachine[Data](ABC):
                 f"lca between {type(self.__state)} and {type(next_state)} is {type(lca)}"
             )
 
-            # exit from state and from all parents up to the lowest common ancestor
+            # exit from state and from all ancestors up to the lowest common ancestor
             self.__data = self.__state.on_exit(dt, self.__data)
-            for p in self.__state.parents():
+            for p in self.__state.ancestors():
                 if lca is None or lca == p:
                     break
                 else:
@@ -115,8 +115,8 @@ class SyncStateMachine[Data](ABC):
             self.__data = transition.action(self.__data)
             self.__state = next_state
 
-            # entry into all parents down from the lowest common ancestor and then into state
-            reversed_ancestors = list(reversed(self.__state.parents()))
+            # entry into all ancestors down from the lowest common ancestor and then into state
+            reversed_ancestors = list(reversed(self.__state.ancestors()))
             if lca is not None:
                 # removing lca and outer ancestor
                 while reversed_ancestors.pop(0) != lca:
@@ -125,11 +125,8 @@ class SyncStateMachine[Data](ABC):
                     self.__data = p.on_entry(dt, self.__data)
             self.__data = self.__state.on_entry(dt, self.__data)
 
-        # on_do for all parents down from the lowest common ancestor and then into state
-        for p in list(reversed(self.__state.parents())):
+        # on_do for all ancestors down from the lowest common ancestor and then into state
+        for p in list(reversed(self.__state.ancestors())):
             self.__data = p.on_do(dt, self.__data)
         self.__data = self.__state.on_do(dt, self.__data)
         return self.__data
-
-
-# TODO: rename parents and parents_rec into ancestors
