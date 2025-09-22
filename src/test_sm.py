@@ -27,9 +27,8 @@ class ManualState(CarState):
         return CarTurnedOnState()
 
     @override
-    def on_do(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_do(self, data: CarData, ctx: Context[CarTimers]):
         data.speed = data.speed + 10 * ctx.dt
-        return data
 
     @override
     def transitions(self) -> list[CarTransition]:
@@ -47,9 +46,8 @@ class LaneKeepingState(CarState):
         return CarTurnedOnState()
 
     @override
-    def on_do(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_do(self, data: CarData, ctx: Context[CarTimers]):
         data.speed = data.speed + 1 * ctx.dt
-        return data
 
     @override
     def transitions(self) -> list[CarTransition]:
@@ -57,7 +55,7 @@ class LaneKeepingState(CarState):
             CarTransition(
                 to=lambda: PullingOverState(),
                 condition=lambda data, ctx: data.speed > 55,
-                action=lambda data, ctx: (print("WARNING: pulling over"), data)[1],
+                action=lambda data, ctx: print("WARNING: pulling over"),
             )
         ]
 
@@ -68,9 +66,8 @@ class PullingOverState(CarState):
         return CarTurnedOnState()
 
     @override
-    def on_do(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_do(self, data: CarData, ctx: Context[CarTimers]):
         data.speed = data.speed - 10 * ctx.dt
-        return data
 
     @override
     def transitions(self) -> list[CarTransition]:
@@ -88,9 +85,8 @@ class StoppedState(CarState):
         return CarTurnedOnState()
 
     @override
-    def on_entry(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_entry(self, data: CarData, ctx: Context[CarTimers]):
         data.speed = 0
-        return data
 
 
 class CarTurnedOnState(CarState):
@@ -103,19 +99,16 @@ class CarTurnedOnState(CarState):
         return IAmACarState()
 
     @override
-    def on_do(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_do(self, data: CarData, ctx: Context[CarTimers]):
         print(f"speed: {data.speed}")
-        return data
 
     @override
-    def on_entry(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_entry(self, data: CarData, ctx: Context[CarTimers]):
         print("entering: TurnedOnState")
-        return data
 
     @override
-    def on_exit(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_exit(self, data: CarData, ctx: Context[CarTimers]):
         print("exiting: TurnedOnState")
-        return data
 
 
 class CarTurnedOffState(CarState):
@@ -124,16 +117,14 @@ class CarTurnedOffState(CarState):
         return IAmACarState()
 
     @override
-    def on_entry(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_entry(self, data: CarData, ctx: Context[CarTimers]):
         print("entering: TurnedOffState")
         ctx.timer(CarTimers.TURN_ON).reset(5)
         print("turn on car in 5 seconds")
-        return data
 
     @override
-    def on_exit(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_exit(self, data: CarData, ctx: Context[CarTimers]):
         print("exiting: TurnedOffState")
-        return data
 
     @override
     def transitions(self) -> list[CarTransition]:
@@ -151,14 +142,12 @@ class IAmACarState(CarState):
         return CarTurnedOffState()
 
     @override
-    def on_entry(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_entry(self, data: CarData, ctx: Context[CarTimers]):
         print("entering: IAmACarState")
-        return data
 
     @override
-    def on_exit(self, data: CarData, ctx: Context[CarTimers]) -> CarData:
+    def on_exit(self, data: CarData, ctx: Context[CarTimers]):
         print("exiting: IAmACarState")
-        return data
 
 
 class VehicleSM(SyncStateMachine[CarData, CarTimers]):

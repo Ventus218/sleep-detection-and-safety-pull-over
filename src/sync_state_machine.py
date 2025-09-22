@@ -13,7 +13,7 @@ class MakeNextState[Data, Timers](Protocol):
 
 
 class Action[Data, Timers](Protocol):
-    def __call__(self, data: Data, ctx: Context[Timers]) -> Data: ...
+    def __call__(self, data: Data, ctx: Context[Timers]): ...
 
 
 class Transition[Data, Timers]:
@@ -27,8 +27,8 @@ class Transition[Data, Timers]:
         self,
         to: MakeNextState[Data, Timers],
         condition: Condition[Data, Timers] = lambda data, ctx: True,
-        action: Action[Data, Timers] = lambda data, ctx: data,
-    ) -> None:
+        action: Action[Data, Timers] = lambda data, ctx: None,
+    ):
         self.make_next_state = to
         self.condition = condition
         self.action = action
@@ -41,14 +41,14 @@ class State[Data, Timers](ABC):
     def entry_child(self) -> State[Data, Timers] | None:
         return None
 
-    def on_entry(self, data: Data, ctx: Context[Timers]) -> Data:  # pyright: ignore[reportUnusedParameter]
-        return data
+    def on_entry(self, data: Data, ctx: Context[Timers]):  # pyright: ignore[reportUnusedParameter]
+        ...
 
-    def on_do(self, data: Data, ctx: Context[Timers]) -> Data:  # pyright: ignore[reportUnusedParameter]
-        return data
+    def on_do(self, data: Data, ctx: Context[Timers]):  # pyright: ignore[reportUnusedParameter]
+        ...
 
-    def on_exit(self, data: Data, ctx: Context[Timers]) -> Data:  # pyright: ignore[reportUnusedParameter]
-        return data
+    def on_exit(self, data: Data, ctx: Context[Timers]):  # pyright: ignore[reportUnusedParameter]
+        ...
 
     def transitions(self) -> Sequence[Transition[Data, Timers]]:
         return list()
@@ -131,19 +131,16 @@ class SyncStateMachine[Data, Timers](ABC):
         self._state = _lowest_entry_child(state)
         self._data = data
         self._context = Context(0)
-        self._data = self._entry_states(
+        self._entry_states(
             list(reversed(self._state.ancestors())) + [self._state], self._context
         )
 
-    def _entry_states(
-        self, states: list[State[Data, Timers]], ctx: Context[Timers]
-    ) -> Data:
+    def _entry_states(self, states: list[State[Data, Timers]], ctx: Context[Timers]):
         for s in states:
-            self._data = s.on_entry(self._data, ctx)
-        return self._data
+            s.on_entry(self._data, ctx)
 
     @final
-    def step(self, dt: float) -> Data:
+    def step(self, dt: float):
         self._context._step(dt)  # pyright: ignore[reportPrivateUsage]
         transition = next(
             (
@@ -159,14 +156,14 @@ class SyncStateMachine[Data, Timers](ABC):
             lca = _lowest_common_ancestor(self._state, next_state)
 
             # exit from state and from all ancestors up to the lowest common ancestor
-            self._data = self._state.on_exit(self._data, self._context)
+            self._state.on_exit(self._data, self._context)
             for p in self._state.ancestors():
                 if lca is None or lca == p:
                     break
                 else:
-                    self._data = lca.on_exit(self._data, self._context)
+                    lca.on_exit(self._data, self._context)
 
-            self._data = transition.action(self._data, self._context)
+            transition.action(self._data, self._context)
             self._state = next_state
 
             # entry into all ancestors down from the lowest common ancestor and then into state
@@ -175,15 +172,12 @@ class SyncStateMachine[Data, Timers](ABC):
                 # removing lca and outer ancestor
                 while reversed_ancestors.pop(0) != lca:
                     ...
-            self._data = self._entry_states(
-                reversed_ancestors + [self._state], self._context
-            )
+            self._entry_states(reversed_ancestors + [self._state], self._context)
 
         # on_do for all ancestors down from the lowest common ancestor and then into state
         for p in list(reversed(self._state.ancestors())):
-            self._data = p.on_do(self._data, self._context)
-        self._data = self._state.on_do(self._data, self._context)
-        return self._data
+            p.on_do(self._data, self._context)
+        self._state.on_do(self._data, self._context)
 
 
 class Timer:
