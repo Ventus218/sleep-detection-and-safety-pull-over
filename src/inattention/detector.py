@@ -1,6 +1,7 @@
 from .utils import EyeStateDetector, CameraStream
 from threading import Lock, Thread
 from typing import Optional
+import queue
 import numpy as np
 import cv2
 
@@ -24,10 +25,41 @@ class InattentionDetector:
         self.cam = cam_stream
         self.detector = EyeStateDetector(eye_threshold)
 
+        self._queue: queue.Queue = queue.Queue(maxsize=1)
+
         # Internal state flags
         self._is_inattent: bool = False   # Latest detection result
-        self._is_busy: bool = False       # True if a detection thread is currently running
         self._lock = Lock()               # Lock for synchronizing thread-safe state updates
+
+        # Worker thread
+        self._running = True
+        self._thread = Thread(target=self._worker_loop, daemon=True)
+        self._thread.start()
+
+    def _worker_loop(self):
+        """Background thread: waits for tasks in the queue and processes them."""
+        while self._running:
+            try:
+                # Block until a task arrives (ignore task contents, it's just a signal)
+                _ = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue  # check running flag again
+
+            try:
+                img_gray = self.cam.next_grayscale()
+                results = self.detector.predict(img_gray)
+
+                # Default: driver is not attentive
+                is_inattent = True
+                for detection in results:
+                    if detection.label == 1:  
+                        is_inattent = False
+
+                with self._lock:
+                    self._is_inattent = is_inattent
+
+            finally:
+                self._queue.task_done()
 
     def detect(self) -> bool:
         """
@@ -40,42 +72,23 @@ class InattentionDetector:
 
         Notes
         -----
-        - This method spawns a background thread for detection so that calls
-          do not block waiting for processing.
         - If called while detection is ongoing, it will simply return the last
           available result.
         """
 
-        def do_detection():
-            """Worker thread that performs the actual detection."""
-            with self._lock:
-                self._is_busy = True
-
+        if self._queue.empty():
             try:
-                img_gray = self.cam.next_grayscale()
-                results = self.detector.predict(img_gray)
+                self._queue.put_nowait(True)
+            except queue.Full:
+                pass  # shouldn't happen with maxsize=1
 
-                # Default: driver is not attentive
-                is_inattent = True
-                for detection in results:
-                    if detection.label == 1:  
-                        is_inattent = False
-
-                self._is_inattent = is_inattent
-
-            finally:
-                with self._lock:
-                    self._is_busy = False
-
-        # Only start a new detection if not already busy
         with self._lock:
-            if not self._is_busy:
-                Thread(target=do_detection, daemon=True).start()
+            return self._is_inattent
 
-        # Return the last known result (may be slightly stale if detection is running)
-        return self._is_inattent
-
-
+    def close(self):
+        """Stop the worker thread gracefully."""
+        self._running = False
+        self._thread.join(timeout=1.0)
 
 class WebcamCameraStream(CameraStream):
     """
