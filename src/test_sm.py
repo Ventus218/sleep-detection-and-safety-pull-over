@@ -76,6 +76,7 @@ class PullingOverState(CarState):
 class StoppedState(CarState):
     @override
     def on_entry(self, data: CarData, ctx: CarContext):
+        print("entering: StoppedState")
         data.speed = 0
 
 
