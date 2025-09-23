@@ -29,10 +29,6 @@ type CarContext = Context[CarTimers]
 
 class ManualState(CarState):
     @override
-    def parent(self) -> CarState | None:
-        return CarTurnedOnState()
-
-    @override
     def on_do(self, data: CarData, ctx: CarContext):
         data.speed = data.speed + 10 * ctx.dt
 
@@ -47,10 +43,6 @@ class ManualState(CarState):
 
 
 class LaneKeepingState(CarState):
-    @override
-    def parent(self) -> CarState | None:
-        return CarTurnedOnState()
-
     @override
     def on_do(self, data: CarData, ctx: CarContext):
         data.speed = data.speed + 1 * ctx.dt
@@ -68,10 +60,6 @@ class LaneKeepingState(CarState):
 
 class PullingOverState(CarState):
     @override
-    def parent(self) -> CarState | None:
-        return CarTurnedOnState()
-
-    @override
     def on_do(self, data: CarData, ctx: CarContext):
         data.speed = data.speed - 10 * ctx.dt
 
@@ -87,22 +75,19 @@ class PullingOverState(CarState):
 
 class StoppedState(CarState):
     @override
-    def parent(self) -> CarState | None:
-        return CarTurnedOnState()
-
-    @override
     def on_entry(self, data: CarData, ctx: CarContext):
         data.speed = 0
 
 
 class CarTurnedOnState(CarState):
     @override
-    def entry_child(self) -> CarState | None:
-        return ManualState()
-
-    @override
-    def parent(self) -> CarState | None:
-        return IAmACarState()
+    def children(self) -> list[CarState]:
+        return [
+            ManualState(),
+            LaneKeepingState(),
+            PullingOverState(),
+            StoppedState(),
+        ]
 
     @override
     def on_do(self, data: CarData, ctx: CarContext):
@@ -118,10 +103,6 @@ class CarTurnedOnState(CarState):
 
 
 class CarTurnedOffState(CarState):
-    @override
-    def parent(self) -> CarState | None:
-        return IAmACarState()
-
     @override
     def on_entry(self, data: CarData, ctx: CarContext):
         print("entering: TurnedOffState")
@@ -144,8 +125,8 @@ class CarTurnedOffState(CarState):
 
 class IAmACarState(CarState):
     @override
-    def entry_child(self) -> CarState | None:
-        return CarTurnedOffState()
+    def children(self) -> list[CarState]:
+        return [CarTurnedOffState(), CarTurnedOnState()]
 
     @override
     def on_entry(self, data: CarData, ctx: CarContext):
@@ -167,7 +148,7 @@ class IAmACarState(CarState):
 
 class VehicleSM(SyncStateMachine[CarData, CarTimers]):
     def __init__(self, data: CarData):
-        super().__init__(IAmACarState(), data)
+        super().__init__([IAmACarState()], data)
 
 
 if __name__ == "__main__":

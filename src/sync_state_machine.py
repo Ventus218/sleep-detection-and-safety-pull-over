@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Protocol, cast, final, override
 
 
@@ -78,18 +78,11 @@ class State[Data, Timers](ABC):
     hold any data/state (to do so use the Data type parameter)
     """
 
-    def parent(self) -> State[Data, Timers] | None:
+    def children(self) -> Sequence[State[Data, Timers]]:
         """
-        The parent state of this state (if present)
+        List of children states, the first one will be the child to enter when entering this state
         """
-        return None
-
-    def entry_child(self) -> State[Data, Timers] | None:
-        """
-        If this state is the parent of at least one other state it should then
-        override this function to return the child to enter to on this state entry
-        """
-        return None
+        return []
 
     def actions(self) -> Sequence[StateAction[Data, Timers]]:
         """
@@ -122,13 +115,6 @@ class State[Data, Timers](ABC):
         """
         return list()
 
-    @final
-    def ancestors(self) -> list[State[Data, Timers]]:
-        """
-        The ancestors of this state in order from closest to furthest
-        """
-        return _ancestors_rec(self, [])
-
     # Equality just checks the type
     @override
     def __eq__(self, value: object, /) -> bool:
@@ -141,36 +127,11 @@ class State[Data, Timers](ABC):
         return hash(type(self))
 
 
-def _ancestors_rec[D, T](
-    child: State[D, T], acc: list[State[D, T]]
-) -> list[State[D, T]]:
-    """
-    Recursively computes the ancestors of a state
-    """
-    match child.parent():
-        case None:
-            return acc
-        case parent:
-            return _ancestors_rec(parent, acc + [parent])
-
-
-def _lowest_common_ancestor[D, T](
-    s1: State[D, T], s2: State[D, T]
-) -> State[D, T] | None:
-    """
-    Computes the lowest common ancestor between two states
-    """
-    ancestors_2 = set(s2.ancestors())
-    for p1 in s1.ancestors():
-        if ancestors_2.__contains__(p1):
-            return p1
-
-
 def _lowest_entry_child[D, T](s: State[D, T]) -> State[D, T]:
     """
     Given a state it follows it's entry child down to the innermost
     """
-    entry_child = s.entry_child()
+    entry_child = s.children()[0] if s.children().__len__() > 0 else None
     if entry_child is None:
         return s
     else:
@@ -259,22 +220,82 @@ class SyncStateMachine[Data, Timers](ABC):
         4. State actions are executed in the order they were defined by the state
     """
 
+    _parents: dict[State[Data, Timers], State[Data, Timers]] = {}
+    """
+    This dictionary associates states to their parent.
+    If a state does not have parent then it will not be present in the dictionary
+    """
+    _ancestors: dict[State[Data, Timers], list[State[Data, Timers]]] = {}
+    """
+    Dictionary associating states with a list of their ancestors going from the inside
+    to the outside.
+    States without ancestors are associated to an empty list, so that it is save to call
+    _ancestors[key] and assume you'll never get None
+    """
     _state: State[Data, Timers]
     _data: Data
     _context: Context[Timers]
 
-    def __init__(self, state: State[Data, Timers], data: Data):
+    def _build_parents_dict(
+        self,
+        top_level_states: Iterable[State[Data, Timers]],
+        acc: dict[State[Data, Timers], State[Data, Timers]],
+    ):
+        for p in top_level_states:
+            for c in p.children():
+                if acc.get(c) is None:
+                    acc[c] = p
+                    self._build_parents_dict(p.children(), acc)
+
+    def _build_ancestors_dict(
+        self,
+        top_level_states: Iterable[State[Data, Timers]],
+        acc: dict[State[Data, Timers], list[State[Data, Timers]]],
+    ):
+        def ancestors_rec(
+            child: State[Data, Timers], acc: list[State[Data, Timers]]
+        ) -> list[State[Data, Timers]]:
+            """
+            Recursively computes the ancestors of a state
+            """
+            match self._parents.get(child):
+                case None:
+                    return acc
+                case parent:
+                    return ancestors_rec(parent, acc + [parent])
+
+        for s in top_level_states:
+            if acc.get(s) is None:
+                acc[s] = ancestors_rec(s, [])
+                self._build_ancestors_dict(s.children(), acc)
+
+    def _lowest_common_ancestor(
+        self, s1: State[Data, Timers], s2: State[Data, Timers]
+    ) -> State[Data, Timers] | None:
+        """
+        Computes the lowest common ancestor between two states
+        """
+        ancestors_2 = set(self._ancestors[s2])
+        for p1 in self._ancestors[s1]:
+            if ancestors_2.__contains__(p1):
+                return p1
+
+
+    def __init__(self, top_level_states: Sequence[State[Data, Timers]], data: Data):
         """
         Starts a state machine.
         Args:
-            state: the initial state
+            top_level_states: all the top level states (first one will be the entry one)
             data: the initial data
         """
-        self._state = _lowest_entry_child(state)
+        self._build_parents_dict(top_level_states, self._parents)
+        self._build_ancestors_dict(top_level_states, self._ancestors)
+        self._state = _lowest_entry_child(top_level_states[0])
         self._data = data
         self._context = Context(0)
         self._entry_states(
-            list(reversed(self._state.ancestors())) + [self._state], self._context
+            list(reversed(self._ancestors[self._state])) + [self._state],
+            self._context,
         )
 
     def _entry_states(self, states: list[State[Data, Timers]], ctx: Context[Timers]):
@@ -301,11 +322,11 @@ class SyncStateMachine[Data, Timers](ABC):
         )
         if transition is not None:
             next_state = _lowest_entry_child(transition.next_state)
-            lca = _lowest_common_ancestor(self._state, next_state)
+            lca = self._lowest_common_ancestor(self._state, next_state)
 
             # exit from state and from all ancestors up to the lowest common ancestor
             self._state.on_exit(self._data, self._context)
-            for p in self._state.ancestors():
+            for p in self._ancestors[self._state]:
                 if lca is None or lca == p:
                     break
                 else:
@@ -315,7 +336,7 @@ class SyncStateMachine[Data, Timers](ABC):
             self._state = next_state
 
             # entry into all ancestors down from the lowest common ancestor and then into state
-            reversed_ancestors = list(reversed(self._state.ancestors()))
+            reversed_ancestors = list(reversed(self._ancestors[self._state]))
             if lca is not None:
                 # removing lca and outer ancestor
                 while reversed_ancestors.pop(0) != lca:
@@ -323,7 +344,7 @@ class SyncStateMachine[Data, Timers](ABC):
             self._entry_states(reversed_ancestors + [self._state], self._context)
 
         # on_do and state actions for all ancestors down from the lowest common ancestor and then into state
-        for p in list(reversed(self._state.ancestors())):
+        for p in list(reversed(self._ancestors[self._state])):
             for a in p.actions():
                 if a.condition(self._data, self._context):
                     a.action(self._data, self._context)
