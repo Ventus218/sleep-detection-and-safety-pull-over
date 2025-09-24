@@ -9,7 +9,7 @@ def main():
     client.set_timeout(120)
     world = client.get_world()
     settings = world.get_settings()
-    settings.synchronous_mode = False
+    settings.synchronous_mode = True
     settings.fixed_delta_seconds = dt
     _ = world.apply_settings(settings)
     while True:
@@ -18,6 +18,7 @@ def main():
         # state_machine.step(dt)
         compute_time = time.time() - tick_start
         if compute_time < dt:
+            print(dt - compute_time)
             time.sleep(dt - compute_time)
 
 if __name__ == '__main__':
