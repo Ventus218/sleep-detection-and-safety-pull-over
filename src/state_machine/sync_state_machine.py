@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC
 from collections.abc import Iterable, Sequence
-from typing import Protocol, cast, final, override
+from typing import Protocol, cast, override
 
 
 class Condition[Data, Timers](Protocol):
@@ -325,7 +325,6 @@ class SyncStateMachine[Data, Timers](ABC):
         for s in states:
             s.on_entry(self._data, ctx)
 
-    @final
     def step(self, dt: float):
         """
         Advances the state machine by dt seconds

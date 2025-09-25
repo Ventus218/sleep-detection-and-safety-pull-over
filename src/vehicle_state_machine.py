@@ -13,16 +13,17 @@ from state_machine.sync_state_machine import (
 
 
 class VehicleData:
+    enable_logging: bool
     speed: Vector3D = Vector3D()
     should_toggle_lane_keeping: bool = False
     should_enter_manual_driving: bool = False
 
     vehicle_actor: Vehicle
-    vehicle_control: VehicleControl
+    vehicle_control: VehicleControl = VehicleControl()
 
-    def __init__(self, vehicle_actor: Vehicle, vehicle_control: VehicleControl):
+    def __init__(self, vehicle_actor: Vehicle, enable_logging: bool = False):
+        self.enable_logging = enable_logging
         self.vehicle_actor = vehicle_actor
-        self.vehicle_control = vehicle_control
 
 
 class VehicleTimers(StrEnum):
@@ -42,12 +43,20 @@ class VehicleTransition(Transition[VehicleData, VehicleTimers]): ...
 
 
 class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
-    def __init__(
-        self,
-        vehicle_actor: Vehicle,
-        vehicle_control: VehicleControl,
-    ):
-        super().__init__([WrapperS()], VehicleData(vehicle_actor, vehicle_control))
+    def __init__(self, vehicle_actor: Vehicle, enable_logging: bool = False):
+        super().__init__(
+            [WrapperS()],
+            VehicleData(vehicle_actor=vehicle_actor, enable_logging=enable_logging),
+        )
+        self._log_current_state()
+
+    @override
+    def step(self, dt: float):
+        super().step(dt)
+        self._log_current_state()
+
+    def _log_current_state(self):
+        print(f"current state: {self._state.__class__.__name__}")
 
 
 class WrapperS(State[VehicleData, VehicleTimers]):
