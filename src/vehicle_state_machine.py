@@ -3,7 +3,7 @@ from typing import override
 
 from carla import Vector3D, Vehicle, VehicleControl
 
-from sync_state_machine import Context, State, StateAction, Transition
+from sync_state_machine import Context, State, StateAction, SyncStateMachine, Transition
 
 
 class VehicleData:
@@ -33,6 +33,15 @@ class VehicleStateAction(StateAction[VehicleData, VehicleTimers]): ...
 
 
 class VehicleTransition(Transition[VehicleData, VehicleTimers]): ...
+
+
+class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
+    def __init__(
+        self,
+        vehicle_actor: Vehicle,
+        vehicle_control: VehicleControl,
+    ):
+        super().__init__([WrapperS()], VehicleData(vehicle_actor, vehicle_control))
 
 
 class WrapperS(State[VehicleData, VehicleTimers]):
