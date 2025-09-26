@@ -1,3 +1,4 @@
+import os
 import time
 from typing import cast
 from carla import Client, Vehicle
@@ -8,7 +9,10 @@ from vehicle_state_machine import VehicleStateMachine
 FRAMERATE = 60
 DT = 1 / FRAMERATE
 
-client = Client("192.168.1.24", 2000)
+host = os.environ.get("HOST", "localhost")
+port = os.environ.get("PORT", "2000")
+port = int(port)
+client = Client(host, port)
 client.set_timeout(120)  # pyright: ignore[reportUnknownMemberType]
 world = client.get_world()
 settings = world.get_settings()
