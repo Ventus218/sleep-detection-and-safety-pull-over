@@ -72,7 +72,7 @@ try:
     _ = gameDisplay.blit(renderObject.surface, (0,0))
     pygame.display.flip()
 
-    state_machine = VehicleStateMachine(vehicle)
+    state_machine = VehicleStateMachine(vehicle, enable_logging=True)
     should_exit = False
     while not should_exit:
         _ = world.tick()
