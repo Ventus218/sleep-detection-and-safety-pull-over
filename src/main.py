@@ -11,20 +11,32 @@ from vehicle_state_machine import VehicleStateMachine
 FRAMERATE = 60
 DT = 1 / FRAMERATE
 
-# Render object to keep and pass the PyGame surface
-@final
-class RenderObject:
+class IO:
+    _surface: pygame.Surface
+    _game_display: pygame.Surface
+
     def __init__(self, width: int, height: int):
-        init_image = np.zeros((height, width, 3), dtype='uint8')
-        self.surface = pygame.surfarray.make_surface(init_image.swapaxes(0,1))
+        init_image = np.zeros((height, width, 3), dtype="uint8")
+        self._surface = pygame.surfarray.make_surface(init_image.swapaxes(0, 1))  # pyright: ignore[reportUnknownMemberType]
 
-# Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
-def pygame_callback(data, obj):
-    img = np.reshape(np.copy(data.raw_data), (data.height, data.width, 4))
-    img = img[:,:,:3]
-    img = img[:, :, ::-1]
-    obj.surface = pygame.surfarray.make_surface(img.swapaxes(0,1))
+        # Initialise the display
+        _ = pygame.init()
+        self._game_display = pygame.display.set_mode(
+            (image_w, image_h), pygame.HWSURFACE | pygame.DOUBLEBUF
+        )
+        _ = self._game_display.blit(self._surface, (0, 0))
+        pygame.display.flip()
 
+    def set_output_image(self, data):
+        # Camera sensor callback, reshapes raw data from camera into 2D RGB and applies to PyGame surface
+        img = np.reshape(np.copy(data.raw_data), (data.height, data.width, 4))
+        img = img[:, :, :3]
+        img = img[:, :, ::-1]
+        self._surface = pygame.surfarray.make_surface(img.swapaxes(0, 1))
+
+    def render_output(self):
+        _ = self._game_display.blit(self._surface, (0,0))
+        pygame.display.flip()
 
 host = os.environ.get("HOST", "localhost")
 port = os.environ.get("PORT", "2000")
@@ -36,6 +48,7 @@ settings = world.get_settings()
 settings.synchronous_mode = True
 settings.fixed_delta_seconds = DT
 _ = world.apply_settings(settings)
+
 
 try:
     spectator = world.get_spectator()
@@ -54,23 +67,15 @@ try:
         Sensor, world.spawn_actor(camera_bp, camera_init_trans, attach_to=vehicle)
     )
 
-    # Start camera with PyGame callback
-    camera.listen(lambda image: pygame_callback(image, renderObject))
-
     # Get camera dimensions
     image_w = camera_bp.get_attribute("image_size_x").as_int()
     image_h = camera_bp.get_attribute("image_size_y").as_int()
 
     # Instantiate objects for rendering and vehicle control
-    renderObject = RenderObject(image_w, image_h)
+    io = IO(image_w, image_h)
 
-    # Initialise the display
-    _ = pygame.init()
-    gameDisplay = pygame.display.set_mode((image_w,image_h), pygame.HWSURFACE | pygame.DOUBLEBUF)
-    # Draw black to the display
-    _ = gameDisplay.fill((0,0,0))
-    _ = gameDisplay.blit(renderObject.surface, (0,0))
-    pygame.display.flip()
+    # Start camera with PyGame callback
+    camera.listen(lambda image: io.set_output_image(image))
 
     state_machine = VehicleStateMachine(vehicle, enable_logging=True)
     should_exit = False
@@ -78,9 +83,7 @@ try:
         _ = world.tick()
         tick_start = time.time()
 
-        # Update the display
-        _ = gameDisplay.blit(renderObject.surface, (0,0))
-        pygame.display.flip()
+        io.render_output()
         # Collect key press events
         for event in pygame.event.get():
             # If the window is closed, break the while loop
