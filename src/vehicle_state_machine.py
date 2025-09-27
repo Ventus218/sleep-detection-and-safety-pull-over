@@ -48,15 +48,23 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
             [WrapperS()],
             VehicleData(vehicle_actor=vehicle_actor, enable_logging=enable_logging),
         )
-        self._log_current_state()
+        if self._data.enable_logging:
+            self._log_current_state()
 
     @override
     def step(self, dt: float):
         super().step(dt)
-        self._log_current_state()
+        if self._data.enable_logging:
+            self._log_current_state()
+            self._log_data()
 
     def _log_current_state(self):
         print(f"current state: {self._state.__class__.__name__}")
+
+    def _log_data(self):
+        print(f"throttle: {self._data.vehicle_control.throttle}")
+        print(f"brake: {self._data.vehicle_control.brake}")
+        print(f"steer: {self._data.vehicle_control.steer}")
 
 
 class WrapperS(State[VehicleData, VehicleTimers]):
