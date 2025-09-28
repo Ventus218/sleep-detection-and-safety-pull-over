@@ -62,20 +62,15 @@ try:
     # Bind camera to pygame window
     camera.listen(lambda image: io.prepare_output_image(cast(Image, image)))
 
-    state_machine = VehicleStateMachine(vehicle, enable_logging=True)
+    state_machine = VehicleStateMachine(
+        pygame_io=io, vehicle_actor=vehicle, enable_logging=True
+    )
 
     should_exit = False
     while not should_exit:
         _ = world.tick()
         tick_start = time.time()
-
-        events = io.update()
-        for event in events:
-            # If the window is closed, break the while loop
-            if event.type == pygame.QUIT:
-                should_exit = True
-
-        state_machine.step(DT)
+        should_exit = not state_machine.step(DT)
         compute_time = time.time() - tick_start
         if compute_time < DT:
             time.sleep(DT - compute_time)

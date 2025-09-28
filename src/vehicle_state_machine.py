@@ -2,7 +2,10 @@ from enum import StrEnum, auto
 from typing import override
 
 from carla import Vector3D, Vehicle, VehicleControl
+import pygame
 
+from pygame_io import PygameIO
+from pygame_vehicle_control import PygameVehicleControl
 from state_machine.sync_state_machine import (
     Context,
     State,
@@ -20,10 +23,20 @@ class VehicleData:
 
     vehicle_actor: Vehicle
     vehicle_control: VehicleControl = VehicleControl()
+    """
+    The Vehicle control to be applied at the end of each step
+    """
+    pygame_io: PygameIO
+    manual_control: PygameVehicleControl
+    pygame_events: list[pygame.event.Event] = []
 
-    def __init__(self, vehicle_actor: Vehicle, enable_logging: bool = False):
+    def __init__(
+        self, pygame_io: PygameIO, vehicle_actor: Vehicle, enable_logging: bool = False
+    ):
         self.enable_logging = enable_logging
         self.vehicle_actor = vehicle_actor
+        self.pygame_io = pygame_io
+        self.manual_control = PygameVehicleControl(vehicle_actor)
 
 
 class VehicleTimers(StrEnum):
@@ -43,20 +56,27 @@ class VehicleTransition(Transition[VehicleData, VehicleTimers]): ...
 
 
 class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
-    def __init__(self, vehicle_actor: Vehicle, enable_logging: bool = False):
+    def __init__(
+        self, pygame_io: PygameIO, vehicle_actor: Vehicle, enable_logging: bool = False
+    ):
         super().__init__(
             [WrapperS()],
-            VehicleData(vehicle_actor=vehicle_actor, enable_logging=enable_logging),
+            VehicleData(
+                pygame_io=pygame_io,
+                vehicle_actor=vehicle_actor,
+                enable_logging=enable_logging,
+            ),
         )
         if self._data.enable_logging:
             self._log_current_state()
 
     @override
-    def step(self, dt: float):
-        super().step(dt)
+    def step(self, dt: float) -> bool:
+        result = super().step(dt)
         if self._data.enable_logging:
             self._log_current_state()
             self._log_data()
+        return result
 
     def _log_current_state(self):
         print(f"current state: {self._state.__class__.__name__}")
@@ -70,16 +90,42 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
 class WrapperS(State[VehicleData, VehicleTimers]):
     @override
     def children(self) -> list[VehicleState]:
-        return [ManualDrivingS(), LaneKeepingS(), PullingOverS(), StoppedS()]
+        return [ManualDrivingS(), LaneKeepingS(), PullingOverS(), StoppedS(), ExitS()]
 
     @override
     def on_early_do(self, data: VehicleData, ctx: VehicleContext):
         data.speed = data.vehicle_actor.get_velocity()
         data.vehicle_control = VehicleControl()
+        data.pygame_events = data.pygame_io.update()
+        data.manual_control.update(data.pygame_events)
 
     @override
     def on_late_do(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle_actor.apply_control(data.vehicle_control)
+
+    @override
+    def transitions(self) -> list[VehicleTransition]:
+        return [
+            VehicleTransition(
+                to=ExitS(),
+                condition=lambda data, ctx: self._exit_transition_condition(data),
+            )
+        ]
+
+    def _is_quit_event(self, e: pygame.event.Event) -> bool:
+        return e.type == pygame.QUIT
+
+    def _exit_transition_condition(self, data: VehicleData) -> bool:
+        return next(filter(self._is_quit_event, data.pygame_events), None) is not None
+
+
+# ========== EXIT_STATE ==========
+
+
+class ExitS(VehicleState):
+    @override
+    def is_exit_state(self) -> bool:
+        return True
 
 
 # ========== MANUAL_DRIVING ==========
@@ -87,8 +133,8 @@ class WrapperS(State[VehicleData, VehicleTimers]):
 
 class ManualDrivingS(VehicleState):
     @override
-    def children(self) -> list[VehicleState]:
-        return [LaneKeepingS()]
+    def on_do(self, data: VehicleData, ctx: VehicleContext):
+        data.vehicle_control = data.manual_control.vehicle_control
 
     @override
     def transitions(self) -> list[VehicleTransition]:
