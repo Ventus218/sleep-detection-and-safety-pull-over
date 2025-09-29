@@ -22,7 +22,6 @@ class VehicleData:
     destination: Location
 
     speed: Vector3D = Vector3D()
-    should_enter_manual_driving: bool = False
 
     vehicle_actor: Vehicle
     vehicle_control: VehicleControl = VehicleControl()
