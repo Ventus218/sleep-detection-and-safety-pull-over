@@ -65,7 +65,7 @@ try:
     destination = random.choice(world.get_map().get_spawn_points()).location
     state_machine = VehicleStateMachine(
         pygame_io=io,
-        vehicle_actor=vehicle,
+        vehicle=vehicle,
         destination=destination,
         enable_logging=True,
     )

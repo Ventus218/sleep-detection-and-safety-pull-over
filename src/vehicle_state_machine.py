@@ -23,7 +23,7 @@ class VehicleData:
 
     speed: Vector3D = Vector3D()
 
-    vehicle_actor: Vehicle
+    vehicle: Vehicle
     vehicle_control: VehicleControl = VehicleControl()
     """
     The Vehicle control to be applied at the end of each step
@@ -37,16 +37,16 @@ class VehicleData:
     def __init__(
         self,
         pygame_io: PygameIO,
-        vehicle_actor: Vehicle,
+        vehicle: Vehicle,
         destination: Location,
         enable_logging: bool = False,
     ):
         self.enable_logging = enable_logging
         self.destination = destination
-        self.vehicle_actor = vehicle_actor
-        self.cruise_control_agent = BasicAgent(self.vehicle_actor)
+        self.vehicle = vehicle
+        self.cruise_control_agent = BasicAgent(self.vehicle)
         self.pygame_io = pygame_io
-        self.manual_control = PygameVehicleControl(vehicle_actor)
+        self.manual_control = PygameVehicleControl(vehicle)
 
 
 class VehicleTimers(StrEnum):
@@ -69,7 +69,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
     def __init__(
         self,
         pygame_io: PygameIO,
-        vehicle_actor: Vehicle,
+        vehicle: Vehicle,
         destination: Location,
         enable_logging: bool = False,
     ):
@@ -77,7 +77,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
             [WrapperS()],
             VehicleData(
                 pygame_io=pygame_io,
-                vehicle_actor=vehicle_actor,
+                vehicle=vehicle,
                 destination=destination,
                 enable_logging=enable_logging,
             ),
@@ -109,7 +109,7 @@ class WrapperS(State[VehicleData, VehicleTimers]):
 
     @override
     def on_early_do(self, data: VehicleData, ctx: VehicleContext):
-        data.speed = data.vehicle_actor.get_velocity()
+        data.speed = data.vehicle.get_velocity()
         data.vehicle_control = VehicleControl()
         data.pygame_events = data.pygame_io.update()
         data.manual_control.update(data.pygame_events)
@@ -117,7 +117,7 @@ class WrapperS(State[VehicleData, VehicleTimers]):
 
     @override
     def on_late_do(self, data: VehicleData, ctx: VehicleContext):
-        data.vehicle_actor.apply_control(data.vehicle_control)
+        data.vehicle.apply_control(data.vehicle_control)
 
     @override
     def transitions(self) -> list[VehicleTransition]:
