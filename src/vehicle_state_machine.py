@@ -157,9 +157,9 @@ class ManualDrivingS(VehicleState):
     def transitions(self) -> list[VehicleTransition]:
         return [
             VehicleTransition(
-                to=LaneKeepingS(),
+                to=CruiseControlS(),
                 condition=lambda data,
-                ctx: data.dashboard_buttons.lane_keeping_button_pressed,
+                ctx: data.dashboard_buttons.cruise_control_button_pressed,
             )
         ]
 
@@ -201,7 +201,7 @@ class LaneKeepingS(VehicleState):
             VehicleTransition(
                 to=ManualDrivingS(),
                 condition=lambda data,
-                ctx: data.dashboard_buttons.lane_keeping_button_pressed,
+                ctx: data.dashboard_buttons.cruise_control_button_pressed,
             ),
             # This transition is here for demonstration purposes
             VehicleTransition(
