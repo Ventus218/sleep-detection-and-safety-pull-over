@@ -4,7 +4,7 @@ import time
 from typing import cast
 
 import pygame
-from carla import Client, Image, Location, Rotation, Sensor, Transform, Vehicle
+from carla import Client, Color, Image, Location, Rotation, Sensor, Transform, Vehicle, World
 
 from remove_vehicles_and_sensors import remove_vehicles_and_sensors
 from vehicle_state_machine import VehicleStateMachine
@@ -35,6 +35,19 @@ image_h = camera_bp.get_attribute("image_size_y").as_int()
 
 io = PygameIO(image_w, image_h)
 
+def draw_on_screen(
+    world: World,
+    transform: Transform,
+    content: str = "O",
+    color: Color | None = None,
+    life_time: float = 20,
+):
+    if color is None:
+        color = Color(0, 255, 0)
+    world.debug.draw_string(
+        transform.location, content, color=color, life_time=life_time
+    )
+
 try:
     # Spawn vehicle and move spectator behind it
     vehicle = cast(Vehicle, world.spawn_actor(vehicle_bp, vehicle_spawn_point))
@@ -62,7 +75,9 @@ try:
 
     # Bind camera to pygame window
     camera.listen(lambda image: io.prepare_output_image(cast(Image, image)))
-    destination = random.choice(world.get_map().get_spawn_points()).location
+    destination_trans = random.choice(world.get_map().get_spawn_points())
+    draw_on_screen(world, destination_trans, content="Destination", life_time=0)
+    destination = destination_trans.location
     state_machine = VehicleStateMachine(
         pygame_io=io,
         vehicle=vehicle,
