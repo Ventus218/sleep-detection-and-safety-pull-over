@@ -34,7 +34,7 @@ class PygameDashboardButtons:
                 key = cast(int, event.key)
                 if key == pygame.K_l:
                     self._lane_keeping_button_pressed = True
-                if key == pygame.K_i:
+                if key == pygame.K_p:
                     self._force_pullover_button_pressed = True
                 if key == pygame.K_m:
                     self._manual_control_button_pressed = True
