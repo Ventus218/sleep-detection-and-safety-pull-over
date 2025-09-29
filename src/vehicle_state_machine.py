@@ -283,15 +283,6 @@ class PullingOverS(VehicleState):
     def children(self) -> list[VehicleState]:
         return [EmergencyLaneNotReachedS(), EmergencyLaneReachedS()]
 
-    @override
-    def transitions(self) -> list[VehicleTransition]:
-        return [
-            VehicleTransition(
-                to=ManualDrivingS(),
-                condition=lambda data, ctx: data.should_enter_manual_driving,
-            )
-        ]
-
 
 def _emergency_lane_reached(data: VehicleData) -> bool:
     # TODO
@@ -345,15 +336,6 @@ class EmergencyLaneReachedS(VehicleState):
 
 
 class StoppedS(VehicleState):
-    @override
-    def transitions(self) -> list[VehicleTransition]:
-        return [
-            VehicleTransition(
-                to=ManualDrivingS(),
-                condition=lambda data, ctx: data.should_enter_manual_driving,
-            )
-        ]
-
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         # TODO: activate emergency signals
