@@ -5,40 +5,42 @@ hide empty description
 [*] --> ManualDriving
 
 state "Manual Driving" as ManualDriving
-ManualDriving ------> LaneKeeping : engages lane keeping
+ManualDriving --> LaneKeeping : engages lane keeping
 
-state "Lane Keeping" as LaneKeeping {
-    [*] --> NoInattentionDetected
+state "Advanced Cruise Control" as CruiseControl {
+    [*] -r-> LaneKeeping
+    state "Lane Keeping" as LaneKeeping {
+        [*] -> NoInattentionDetected
 
-    state "No Inattention Detected" as NoInattentionDetected
-    NoInattentionDetected -r-> InattentionDetected : inattention detected
+        state "No Inattention Detected" as NoInattentionDetected
+        NoInattentionDetected -> InattentionDetected : inattention detected
 
-    state "Inattention Detected" as InattentionDetected
-    InattentionDetected -l-> NoInattentionDetected : no inattention detected
-    InattentionDetected -r-> PullOverPrep : after X seconds
+        state "Inattention Detected" as InattentionDetected
+        InattentionDetected -> NoInattentionDetected : no inattention detected
+        InattentionDetected -r-> PullOverPrep : after X seconds
 
-    state "Pull Over Preparation" as PullOverPrep
-    PullOverPrep --> PullingOver : pulling over is safe
-    PullOverPrep : do / slow down to a minimum of X km/h
-    PullOverPrep : do / check pull over safety
+        state "Pull Over Preparation" as PullOverPrep
+        PullOverPrep --> PullingOver : pulling over is safe
+        PullOverPrep : do / slow down to a minimum of X km/h
+        PullOverPrep : do / check pull over safety
+    }
+    LaneKeeping -u-> ManualDriving : disengage lane keeping
+
+    state "Pulling Over" as PullingOver {
+        [*] -> EmergencyLaneNotReached
+        state "Emergency Lane Not Reached" as EmergencyLaneNotReached
+        EmergencyLaneNotReached : do / slow down to a minimum of X km/h (example: 10 km/h)
+        EmergencyLaneNotReached : do / pull over to the emergency lane
+
+        EmergencyLaneNotReached --> EmergencyLaneReached : emergency lane reached
+
+        state "Emergency Lane Reached" as EmergencyLaneReached
+        EmergencyLaneReached --> Stopped : [speed == 0]
+        EmergencyLaneReached : do / slow down
+    }
+
+    state Stopped
 }
-LaneKeeping ---> ManualDriving : disengage lane keeping
-
-state "Pulling Over" as PullingOver {
-    [*] --> EmergencyLaneNotReached
-    state "Emergency Lane Not Reached" as EmergencyLaneNotReached
-    EmergencyLaneNotReached : do / slow down to a minimum of X km/h (example: 10 km/h)
-    EmergencyLaneNotReached : do / pull over to the emergency lane
-
-    EmergencyLaneNotReached --> EmergencyLaneReached : emergency lane reached
-
-    state "Emergency Lane Reached" as EmergencyLaneReached
-    EmergencyLaneReached --> Stopped : [speed == 0]
-    EmergencyLaneReached : do / slow down
-}
-PullingOver -u-> ManualDriving : manual driving button pressed
-
-state Stopped
-Stopped -u-> ManualDriving : manual driving button pressed
+CruiseControl -u-> ManualDriving : manual driving button pressed
 
 @enduml
