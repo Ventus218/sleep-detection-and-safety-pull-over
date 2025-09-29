@@ -19,15 +19,15 @@ class PygameDashboardButtons:
         return self._force_pullover_button_pressed
 
     def __init__(self):
+        self._reset_state()
+
+    def _reset_state(self):
         self._cruise_control_button_pressed = False
         self._force_pullover_button_pressed = False
         self._manual_control_button_pressed = False
 
     def update(self, events: Sequence[pygame.event.Event]):
-        # Reset state
-        self._cruise_control_button_pressed = False
-        self._manual_control_button_pressed = False
-        self._force_pullover_button_pressed = False
+        self._reset_state()
 
         # Process events
         for event in events:
