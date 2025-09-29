@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from typing import cast
 
@@ -61,9 +62,12 @@ try:
 
     # Bind camera to pygame window
     camera.listen(lambda image: io.prepare_output_image(cast(Image, image)))
-
+    destination = random.choice(world.get_map().get_spawn_points()).location
     state_machine = VehicleStateMachine(
-        pygame_io=io, vehicle_actor=vehicle, enable_logging=True
+        pygame_io=io,
+        vehicle_actor=vehicle,
+        destination=destination,
+        enable_logging=True,
     )
 
     should_exit = False
