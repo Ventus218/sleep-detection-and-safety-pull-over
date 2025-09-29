@@ -207,11 +207,6 @@ class LaneKeepingS(VehicleState):
     @override
     def transitions(self) -> list[VehicleTransition]:
         return [
-            VehicleTransition(
-                to=ManualDrivingS(),
-                condition=lambda data,
-                ctx: data.dashboard_buttons.cruise_control_button_pressed,
-            ),
             # This transition is here for demonstration purposes
             VehicleTransition(
                 to=PullOverPreparationS(),
