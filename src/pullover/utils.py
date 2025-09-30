@@ -7,13 +7,27 @@ import math
 # ==============================
 
 class RansacPlaneFit():
-    def __init__(self, points: np.ndarray, thresh: float, max_trials: int = 400):
+    def __init__(self, points: np.ndarray, thresh: float, max_trials: int = 400, origin = (0, 0, 0)):
         self.points = points
+        self.num_points = points.shape[0]
         self.threshold = thresh
         self.max_trials = max_trials
-        self.num_inliers = ...
-        self.num_outliers = ...
-        self.min_distance = ...
+
+        plane, mask = fit_plane_ransac(points, thresh, max_trials)
+
+        if plane is not None and mask is not None:
+            # plane found: compute right values
+            self.has_found_plane = True
+            self.num_inliers = int(mask.sum())
+            self.num_outliers = self.num_points - self.num_inliers
+            self.distance = point_plane_distance(plane, origin)
+        else:
+            # plane not found: no inliers
+            self.has_found_plane = False
+            self.num_inliers = 0
+            self.num_outliers = self.num_points
+            self.distance = 0.0
+            
 
 
 def fit_plane_ransac(
