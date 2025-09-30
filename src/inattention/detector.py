@@ -138,7 +138,6 @@ class WebcamCameraStream(CameraStream):
         Returns black frame if frame could not be read.
         """
         if self._cap is None:
-            self.logger.warning("Failed to read frame from camera.")
             return self._default_frame
         
         ret, frame = self._cap.read()
