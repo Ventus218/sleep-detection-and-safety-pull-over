@@ -1,6 +1,7 @@
 from .utils import EyeStateDetector, CameraStream
 from threading import Lock, Thread
 from typing import Optional
+import logging
 import queue
 import numpy as np
 import cv2
@@ -87,6 +88,7 @@ class InattentionDetector:
 
     def close(self):
         """Stop the worker thread gracefully."""
+        self.cam.close()
         self._running = False
         self._thread.join(timeout=1.0)
 
@@ -113,10 +115,14 @@ class WebcamCameraStream(CameraStream):
     ):
         self.device = device
         self.flip = flip
+        self.logger = logging.getLogger(__name__)
+        self._default_frame = np.zeros((100, 100, 3), np.uint8)
 
-        self._cap = cv2.VideoCapture(self.device)
+        self._cap: Optional[cv2.VideoCapture] = cv2.VideoCapture(self.device)
         if not self._cap.isOpened():
-            raise RuntimeError(f"Could not open camera device {self.device}")
+            self._cap = None
+            self.logger.warning("Could not open camera device %s", self.device)
+            return
 
         # Optionally set resolution
         if width is not None:
@@ -129,11 +135,18 @@ class WebcamCameraStream(CameraStream):
         """
         Return next color frame (BGR) as a numpy ndarray.
 
-        Raises RuntimeError if frame could not be read.
+        Returns black frame if frame could not be read.
         """
+        if self._cap is None:
+            self.logger.warning("Failed to read frame from camera.")
+            return self._default_frame
+        
         ret, frame = self._cap.read()
+
         if not ret or frame is None:
-            raise RuntimeError("Failed to read frame from camera.")
+            self.logger.warning("Failed to read frame from camera.")
+            return self._default_frame
+        
         if self.flip:
             frame = cv2.flip(frame, 1)
         return frame

@@ -16,6 +16,8 @@ from state_machine.sync_state_machine import (
 )
 from agents.navigation.basic_agent import BasicAgent
 
+from inattention.detector import *
+
 
 class VehicleData:
     enable_logging: bool
@@ -34,11 +36,17 @@ class VehicleData:
     pygame_events: list[pygame.event.Event] = []
     cruise_control_agent: BasicAgent
 
+    inattention_detector: InattentionDetector
+    """
+    Detector used to spot inattentive behaviours in the driver.
+    """
+
     def __init__(
         self,
         pygame_io: PygameIO,
         vehicle: Vehicle,
         destination: Location,
+        camera_stream: CameraStream,
         enable_logging: bool = False,
     ):
         self.enable_logging = enable_logging
@@ -47,6 +55,7 @@ class VehicleData:
         self.cruise_control_agent = BasicAgent(self.vehicle)
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
+        self.inattention_detector = InattentionDetector(camera_stream, eye_threshold=0.15)
 
 
 class VehicleTimers(StrEnum):
@@ -79,6 +88,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
                 pygame_io=pygame_io,
                 vehicle=vehicle,
                 destination=destination,
+                camera_stream=WebcamCameraStream(device=0, width=600, height=480),
                 enable_logging=enable_logging,
             ),
         )
@@ -127,6 +137,10 @@ class WrapperS(State[VehicleData, VehicleTimers]):
                 condition=lambda data, ctx: self._exit_transition_condition(data),
             )
         ]
+    
+    @override
+    def on_exit(self, data: VehicleData, ctx: Context[VehicleTimers]):
+        data.inattention_detector.close()
 
     def _is_quit_event(self, e: pygame.event.Event) -> bool:
         return e.type == pygame.QUIT
@@ -215,8 +229,7 @@ class LaneKeepingS(VehicleState):
         ]
 
 def _inattention_detected(data: VehicleData) -> bool:
-    # TODO
-    return False
+    return data.inattention_detector.detect()
 
 
 class NoInattentionDetectedS(VehicleState):

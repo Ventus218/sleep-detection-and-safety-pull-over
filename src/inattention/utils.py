@@ -128,6 +128,11 @@ class CameraStream():
 
     def next(self) -> np.ndarray:
         """Return the next image of the stream as a numpy array."""
+        raise NotImplementedError()
 
     def next_grayscale(self) -> np.ndarray:
         """Return the next image of the stream, in grayscale, as a numpy array."""
+        raise NotImplementedError()
+    
+    def close(self) -> None:
+        """Close the camera stream."""
