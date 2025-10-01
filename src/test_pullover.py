@@ -43,12 +43,16 @@ def attach_radar(vehicle: Vehicle):
     # Add a new radar sensor to my ego
     # --------------
     rad_bp = world.get_blueprint_library().find('sensor.other.radar')
-    rad_bp.set_attribute('horizontal_fov', str(35))
-    rad_bp.set_attribute('vertical_fov', str(20))
+
+    # Right-size calibration
+    rad_bp.set_attribute('horizontal_fov', str(85))
+    rad_bp.set_attribute('vertical_fov', str(2))
     rad_bp.set_attribute('range', str(20))
+    rad_bp.set_attribute('points_per_second', str(2500))
     rad_location = carla.Location(x=2.0, z=1.0)
-    rad_rotation = carla.Rotation(pitch=5)
+    rad_rotation = carla.Rotation(yaw=50)
     rad_transform = carla.Transform(rad_location,rad_rotation)
+
 
     rad_ego = cast(Sensor, world.spawn_actor(rad_bp,rad_transform,attach_to=vehicle, attachment_type=carla.AttachmentType.Rigid))
 
