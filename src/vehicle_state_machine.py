@@ -53,6 +53,8 @@ class VehicleData:
         self.destination = destination
         self.vehicle = vehicle
         self.cruise_control_agent = BasicAgent(self.vehicle)
+        self.cruise_control_agent.ignore_traffic_lights()
+        self.cruise_control_agent.set_target_speed(50)  # pyright: ignore[reportUnknownMemberType]
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(camera_stream, eye_threshold=0.15)
