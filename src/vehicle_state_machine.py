@@ -1,9 +1,12 @@
 from enum import StrEnum, auto
 from typing import override
 
-from carla import Location, Vector3D, Vehicle, VehicleControl
 import pygame
+from carla import Location, Vector3D, Vehicle, VehicleControl
 
+from agents.navigation.basic_agent import BasicAgent
+from inattention.detector import InattentionDetector
+from inattention.utils import CameraStream
 from pygame_dashboard_buttons import PygameDashboardButtons
 from pygame_io import PygameIO
 from pygame_vehicle_control import PygameVehicleControl
@@ -14,9 +17,6 @@ from state_machine.sync_state_machine import (
     SyncStateMachine,
     Transition,
 )
-from agents.navigation.basic_agent import BasicAgent
-
-from inattention.detector import *
 
 
 class VehicleData:
@@ -46,7 +46,7 @@ class VehicleData:
         pygame_io: PygameIO,
         vehicle: Vehicle,
         destination: Location,
-        camera_stream: CameraStream,
+        driver_camera_stream: CameraStream,
         enable_logging: bool = False,
     ):
         self.enable_logging = enable_logging
@@ -57,7 +57,9 @@ class VehicleData:
         self.cruise_control_agent.set_target_speed(50)  # pyright: ignore[reportUnknownMemberType]
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
-        self.inattention_detector = InattentionDetector(camera_stream, eye_threshold=0.15)
+        self.inattention_detector = InattentionDetector(
+            driver_camera_stream, eye_threshold=0.15
+        )
 
 
 class VehicleTimers(StrEnum):
@@ -82,6 +84,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
         pygame_io: PygameIO,
         vehicle: Vehicle,
         destination: Location,
+        driver_camera_stream: CameraStream,
         enable_logging: bool = False,
     ):
         super().__init__(
@@ -90,7 +93,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
                 pygame_io=pygame_io,
                 vehicle=vehicle,
                 destination=destination,
-                camera_stream=WebcamCameraStream(device=0, width=600, height=480),
+                driver_camera_stream=driver_camera_stream,
                 enable_logging=enable_logging,
             ),
         )
@@ -139,7 +142,7 @@ class WrapperS(State[VehicleData, VehicleTimers]):
                 condition=lambda data, ctx: self._exit_transition_condition(data),
             )
         ]
-    
+
     @override
     def on_exit(self, data: VehicleData, ctx: Context[VehicleTimers]):
         data.inattention_detector.close()
@@ -229,6 +232,7 @@ class LaneKeepingS(VehicleState):
                 ctx: data.dashboard_buttons.force_pullover_button_pressed,
             ),
         ]
+
 
 def _inattention_detected(data: VehicleData) -> bool:
     return data.inattention_detector.detect()

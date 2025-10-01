@@ -15,9 +15,10 @@ from carla import (
     World,
 )
 
+from inattention.detector import WebcamCameraStream
+from pygame_io import PygameIO
 from remove_vehicles_and_sensors import remove_vehicles_and_sensors
 from vehicle_state_machine import VehicleStateMachine
-from pygame_io import PygameIO
 
 FRAMERATE = 40
 DT = 1 / FRAMERATE
@@ -90,10 +91,14 @@ try:
     destination = destination_trans.location
     _ = world.tick()  # fixes bug: https://github.com/carla-simulator/carla/issues/2634
 
+    # Getting driver camera (webcam)
+    driver_camera_stream = WebcamCameraStream(device=0, width=600, height=480)
+
     state_machine = VehicleStateMachine(
         pygame_io=io,
         vehicle=vehicle,
         destination=destination,
+        driver_camera_stream=driver_camera_stream,
         enable_logging=True,
     )
 
