@@ -18,7 +18,8 @@ from carla import (
 from inattention.detector import WebcamCameraStream
 from pygame_io import PygameIO
 from remove_vehicles_and_sensors import remove_vehicles_and_sensors
-from vehicle_state_machine import VehicleLoggingConfig, VehicleStateMachine
+from vehicle_logging_config import VehicleLoggingConfig
+from vehicle_state_machine import VehicleStateMachine
 
 FRAMERATE = 40
 DT = 1 / FRAMERATE
