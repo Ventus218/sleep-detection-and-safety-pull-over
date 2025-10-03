@@ -41,7 +41,6 @@ We detect driver drowsiness or more generally inattention by leveraging an artif
 During pull over preparation we check the following conditions in order to compute if the vehicle can start pulling over:
 
 - there must be an emergency lane
-- there must be no vehicle coming from the emergency lane (behind the ego vehicle)
 - for the entire space needed for the maneuver:
 
   - the emergency lane must be clear of obstacles (vehicles or static obstacles)
@@ -53,52 +52,58 @@ The reason is that we want the driver to explicitly express the will of taking c
 ## How to detect a safe pull over spot
 
 We basically need to achieve two goals and combine their results to decide if a spot is safe for pulling over.
-- Detect the emergency lane (we must distinguish if the vehicle is approaching an exit)
+- Detect the emergency lane and possible highway exits
 - Detect if the emergency lane is free of obstacles
 
-Initially we thought about exploiting the guardrail in order to detect the road boundary. In the end we decided
-not do use that since guardrails may be missing (more likely than the emergency lane).
+Initially we thought about exploiting the guardrail in order to detect the road boundary.
+In the end we decided not do use that since guardrails are more likely to be missing with respect to the emergency lane.
 
-### With camera and Radar
-We exploit the camera in order to detect a continous (no exit) white line (the emergency lane).
-We exploit the radar in order to detect any obstacles in the emergency lane.
+We explored two different approaches using different sensors which are described below.
 
-1. Camera need to have a free line of sight on the emergency lane line for X meters ahead of the vehicle (X meters is the minimum distance for the vehicle to be able to stop safely)
-2. If the line is not continous for X meters we assume there is a nearby exit -> NOT SAFE
-3. The radar projects multiple points on the ground for X meters ahead (and slightlu on the right) of the vehicle.
-4. We only consider points which distance from the line is about the width of the vehicle (a bit more).
-5. Now we consider a ground plane and then measure the height of each considered point from this plane.
+In order to simplify the examples and the implentation of this project we decided to assume
+a right-hand drive context.
+
+### Camera and radar approach
+
+We exploit a forward looking camera in order to detect a continous (no exit) lane marking (the emergency lane).
+
+We exploit a long range radar pointing forward with a slight tilt on the right in order to detect any obstacles in the emergency lane.
+
+1. The camera need to have a free line of sight on the emergency lane line for X meters ahead of the vehicle (X meters is the minimum distance for the vehicle to be able to stop safely and gently)
+2. If the line is not continous throughout all the X meters we assume there is a nearby exit -> NOT SAFE
+3. The radar projects multiple points on the ground ahead for X meters (and slightly on the right) of the vehicle.
+4. We only consider points which distance from the lane marking is about the width of the vehicle (a bit more). This allows us to allow slimmer vehicles to pull over even if the emergency lane il smaller in width.
+5. We measure the height of each considered point from the ground (approximating it with a plane).
 6. If there are multiple points which distance from the plane is relevantly high, we then assume that there is some obstacle in the emergency lane -> NOT SAFE.
 
-As soon as the car start searching for a pull over spot it will gently approach the emergency lane line in order to extend the visibility of the radar onto the emergency lane
+As soon as the car start searching for a pull over spot it will gently approach the emergency lane marking in order to extend the visibility of the radar onto the emergency lane.
 
 #### Pros
 - Cheaper sensors
+
 #### Cons
+
 - Harder to detect a safe pull over spot with high confidence (may result in missing some safe pull over spots)
-- Harder to detect a safe pull over spot in turning roads
+- Harder to detect a safe pull over spot in turning roads (it can still be achieved but it requires the vehicle to slow down to a lower speed when searching for the spot)
 
-### With a semantic lidar
+### Semantic lidar approach
 
-First we detect a white line aside of the vehicle.
-If the line is not detected we assume that there is no emergency lane -> NOT SAFE
-If the line is dashed we assume there is a nearby exit -> NOT SAFE
-
-Now that we have a solid white line we ensure there is enough space for the vehicle
-to pull over (the emergency lane is wide enough).
-We project multiple points on the other side of the white line and then we only
-consider points which distance from the line is about the width of the vehicle (a bit more).
-
-Now we consider a ground plane and then measure the height of each considered point from
-this plane.
-If there are multiple points which distance from the plane is relevantly high, we
-then assume that there is some obstacle in the emergency lane -> NOT SAFE.
+1. The sensor need to have a free line of sight on the emergency lane line for X meters ahead of the vehicle (X meters is the minimum distance for the vehicle to be able to stop safely and gently)
+2. If the line is not continous throughout all the X meters we assume there is a nearby exit -> NOT SAFE
+3. Now that we have a solid white line we ensure there is enough space for the vehicle to pull over (the emergency lane is wide enough).
+4. We consider all the sensed points on the other side of the white line and then we only
+consider points which distance from the line (the sensor can give us 3D coorinates of the line) is about the width of the vehicle (a bit more).
+5. We measure the height of each considered point from the ground (approximating it with a plane).
+6. If there are multiple points which distance from the plane is relevantly high, we then assume that there is some obstacle in the emergency lane -> NOT SAFE.
 
 #### Pros
-- Higher capability of detecting a safe pull over spot with confidence
-#### Cons
-- Expensive sensors required
 
+- Higher capability of detecting a safe pull over spot with confidence
+- More resilient on turning roads, even at higher speeds
+
+#### Cons
+
+- Extremely expensive sensor
 
 ## Calculations by ChatGPT (to be verified)
 Let’s calculate it carefully step by step.
