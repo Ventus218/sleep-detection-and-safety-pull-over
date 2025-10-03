@@ -105,58 +105,17 @@ consider points which distance from the line (the sensor can give us 3D coorinat
 
 - Extremely expensive sensor
 
-## Calculations by ChatGPT (to be verified)
-Let’s calculate it carefully step by step.
+We finally decided to apply the first approach in order to make our system easier to deploy on cheaper vehicles.
 
-Given:
+## Finetuning parameters for a smooth pull over
 
-* Initial speed ( v_i = 14 , \text{m/s} )
-* Final speed ( v_f = 0 , \text{m/s} )
-* Deceleration ( a = 2 , \text{m/s}^2 )
+We start by choosing an appropriate deceleration for the vehicle to stop: 2 m/s^2
 
-We use the basic kinematic relation for constant acceleration:
-[
-v_f = v_i - a t
-]
+Then we see that at a speed of 50 km/h (13.9 m/s) it would take around 7 s for the vehicle to stop.
 
-Solve for time ( t ):
+The stopping distance is about 47.6 meters which is not a large distance and as such it is suitable even in case of the road turning.
 
-[
-t = \frac{v_i - v_f}{a}
-]
+We thought that it would not be safe for the vehicle to reach a full stop as soon as it has completely entered the emergency lane.
+And so we decided that the vehicle should keep a minimum of 10 km/h of speed until it reaches the emergency lane and only after go to a full stop.
 
-Substitute the values:
-
-[
-t = \frac{14 - 0}{2} = \frac{14}{2} = 7
-]
-
-✅ **Answer:**
-It will take **7 seconds** to come to a stop if you decelerate gently at **2 m/s²** from 14 m/s (≈ 50 km/h).
-
-Would you also like me to calculate the **stopping distance** for that case?
-
-Perfect 👍
-
-We can find the **stopping distance** using the kinematic formula:
-
-[
-d = \frac{v_i^2 - v_f^2}{2a}
-]
-
-Given:
-
-* ( v_i = 14 , \text{m/s} )
-* ( v_f = 0 , \text{m/s} )
-* ( a = 2 , \text{m/s}^2 )
-
-Substitute:
-
-[
-d = \frac{14^2 - 0^2}{2 \times 2} = \frac{196}{4} = 49
-]
-
-✅ **Answer:**
-It will take **7 seconds** and **49 meters** to come to a smooth stop from **14 m/s** with a **2 m/s²** deceleration.
-
-That’s a comfortable, natural-feeling stop — similar to how a skilled driver would brake gently to a halt from ~50 km/h.
+Given that we decided that the emergency lane should be clear for at least 70 meters in order to consider it safe for the vehicle to star pulling over.
