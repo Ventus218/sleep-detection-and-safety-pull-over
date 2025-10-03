@@ -289,10 +289,8 @@ class PullOverPreparationS(VehicleState):
         ]
 
     @override
-    def on_do(self, data: VehicleData, ctx: VehicleContext):
-        # TODO: choose appropriate speed and braking power
-        if data.speed.length() > 50 / 3.6:
-            data.vehicle_control.brake = 0.2
+    def on_entry(self, data: VehicleData, ctx: VehicleContext):
+        data.cruise_control_agent.set_target_speed(50)
 
 
 # ========== PULLING_OVER ==========
