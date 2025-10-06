@@ -15,20 +15,26 @@ state "Advanced Cruise Control" as CruiseControl {
         state "No Inattention Detected" as NoInattentionDetected
         NoInattentionDetected -> InattentionDetected : inattention detected
 
-        state "Inattention Detected" as InattentionDetected
+        state "Inattention Detected" as InattentionDetected {
+            InattentionDetected : after 10 seconds / activate sound noise
+            InattentionDetected : exit / deactivate sound noise
+        }
         InattentionDetected -> NoInattentionDetected : no inattention detected
-        InattentionDetected -r-> PullOverPrep : after X seconds
+        InattentionDetected -r-> PullOverPrep : after 20 seconds
 
-        state "Pull Over Preparation" as PullOverPrep
+        state "Pull Over Preparation" as PullOverPrep {
+            PullOverPrep : entry / activate turn signals
+            PullOverPrep : do / slow down to a minimum of 50 km/h
+            PullOverPrep : do / check pull over safety
+            PullOverPrep : do / inform driver about imminent pull over (dashboard)
+        }
         PullOverPrep --> PullingOver : pulling over is safe
-        PullOverPrep : do / slow down to a minimum of X km/h
-        PullOverPrep : do / check pull over safety
     }
 
     state "Pulling Over" as PullingOver {
         [*] -> EmergencyLaneNotReached
         state "Emergency Lane Not Reached" as EmergencyLaneNotReached
-        EmergencyLaneNotReached : do / slow down to a minimum of X km/h (example: 10 km/h)
+        EmergencyLaneNotReached : do / slow down to a minimum of 10 km/h
         EmergencyLaneNotReached : do / pull over to the emergency lane
 
         EmergencyLaneNotReached --> EmergencyLaneReached : emergency lane reached
@@ -38,8 +44,12 @@ state "Advanced Cruise Control" as CruiseControl {
         EmergencyLaneReached : do / slow down
     }
 
-    state Stopped
+    state Stopped {
+        Stopped : entry / activate emergency signals
+        Stopped : exit / deactivate emergency signals
+    }
 }
 CruiseControl -l-> ManualDriving : manual driving button pressed
+CruiseControl : exit / deactivate turn signals
 
 @enduml
