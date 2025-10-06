@@ -23,6 +23,7 @@ from vehicle_state_machine import VehicleStateMachine
 
 FRAMERATE = 40
 DT = 1 / FRAMERATE
+MAP = "Town12"
 
 host = os.environ.get("HOST", "localhost")
 port = os.environ.get("PORT", "2000")
@@ -30,8 +31,13 @@ port = int(port)
 client = Client(host, port)
 client.set_timeout(120)  # pyright: ignore[reportUnknownMemberType]
 
-# Set simulator to synchronous mode and fixed time step
 world = client.get_world()
+map = world.get_map()
+if not map.name.endswith(MAP):
+    world = client.load_world(MAP)
+    map = world.get_map()
+
+# Set simulator to synchronous mode and fixed time step
 settings = world.get_settings()
 settings.synchronous_mode = True
 settings.fixed_delta_seconds = DT
@@ -39,7 +45,7 @@ _ = world.apply_settings(settings)
 
 blueprint_lib = world.get_blueprint_library()
 vehicle_bp = blueprint_lib.filter("vehicle.*")[0]
-vehicle_spawn_point = world.get_map().get_spawn_points()[0]
+vehicle_spawn_point = map.get_spawn_points()[0]
 camera_bp = blueprint_lib.find("sensor.camera.rgb")
 image_w = camera_bp.get_attribute("image_size_x").as_int()
 image_h = camera_bp.get_attribute("image_size_y").as_int()
