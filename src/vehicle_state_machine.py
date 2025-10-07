@@ -4,7 +4,7 @@ from typing import cast, override
 import pygame
 from carla import Location, Map, Vector3D, Vehicle, VehicleControl, World
 
-from agents.navigation.behavior_agent import BehaviorAgent
+from agents.navigation.basic_agent import BasicAgent
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 from inattention.detector import InattentionDetector
 from inattention.utils import CameraStream
@@ -54,7 +54,7 @@ class VehicleData:
     manual_control: PygameVehicleControl
     dashboard_buttons: PygameDashboardButtons = PygameDashboardButtons()
     pygame_events: list[pygame.event.Event] = []
-    cruise_control_agent: BehaviorAgent
+    cruise_control_agent: BasicAgent
     global_route_planner: GlobalRoutePlanner
 
     inattention_detector: InattentionDetector
@@ -80,7 +80,7 @@ class VehicleData:
         self.world = world
         self.map = map
         self.vehicle = vehicle
-        self.cruise_control_agent = BehaviorAgent(self.vehicle, map_inst=map)
+        self.cruise_control_agent = BasicAgent(self.vehicle, map_inst=map)
         self.global_route_planner = self.cruise_control_agent.get_global_planner()
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
@@ -232,7 +232,7 @@ class CruiseControlS(VehicleState):
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         # Using cached map and global_route_planner to avoid expensive blocking call
-        data.cruise_control_agent = BehaviorAgent(
+        data.cruise_control_agent = BasicAgent(
             data.vehicle, map_inst=data.map, grp_inst=data.global_route_planner
         )
         data.cruise_control_agent.ignore_traffic_lights()
