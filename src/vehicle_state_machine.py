@@ -300,7 +300,7 @@ class InattentionDetectedS(VehicleState):
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         # TODO: choose proper amount of seconds
-        ctx.timer(VehicleTimers.INATTENTION).reset(5)
+        ctx.timer(VehicleTimers.INATTENTION).reset(20)
 
 
 def _pull_over_is_safe(data: VehicleData) -> bool:
