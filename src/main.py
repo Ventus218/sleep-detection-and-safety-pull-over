@@ -72,6 +72,7 @@ try:
         pygame_io=io,
         vehicle=vehicle,
         destination=destination,
+        world=world,
         map=map,
         meters_for_safe_pullover=50,
         driver_camera_stream=driver_camera_stream,

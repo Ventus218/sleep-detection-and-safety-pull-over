@@ -2,9 +2,10 @@ from enum import StrEnum, auto
 from typing import cast, override
 
 import pygame
-from carla import Location, Map, Vector3D, Vehicle, VehicleControl
+from carla import Location, Map, Vector3D, Vehicle, VehicleControl, World
 
-from agents.navigation.basic_agent import BasicAgent
+from agents.navigation.behavior_agent import BehaviorAgent
+from agents.navigation.global_route_planner import GlobalRoutePlanner
 from inattention.detector import InattentionDetector
 from inattention.utils import CameraStream
 from pygame_dashboard_buttons import PygameDashboardButtons
@@ -19,12 +20,26 @@ from state_machine.sync_state_machine import (
 )
 from vehicle_logging_config import VehicleLoggingConfig
 
+class VehicleParams:
+    destination: Location
+    meters_for_safe_pullover: float
+    cruise_target_speed: float
+
+    def __init__(
+        self,
+        destination: Location,
+        meters_for_safe_pullover: float,
+        cruise_target_speed: float,
+    ):
+        self.destination = destination
+        self.meters_for_safe_pullover = meters_for_safe_pullover
+        self.cruise_target_speed = cruise_target_speed
 
 class VehicleData:
     logging_config: VehicleLoggingConfig
-    destination: Location
+    world: World
     map: Map
-    meters_for_safe_pullover: float
+    params: VehicleParams
 
     speed: Vector3D = Vector3D()
 
@@ -37,7 +52,8 @@ class VehicleData:
     manual_control: PygameVehicleControl
     dashboard_buttons: PygameDashboardButtons = PygameDashboardButtons()
     pygame_events: list[pygame.event.Event] = []
-    cruise_control_agent: BasicAgent
+    cruise_control_agent: BehaviorAgent
+    global_route_planner: GlobalRoutePlanner
 
     inattention_detector: InattentionDetector
     """
@@ -48,9 +64,9 @@ class VehicleData:
         self,
         pygame_io: PygameIO,
         vehicle: Vehicle,
-        destination: Location,
+        world: World,
         map: Map,
-        meters_for_safe_pullover: float,
+        params: VehicleParams,
         driver_camera_stream: CameraStream,
         logging_config: VehicleLoggingConfig | None,
     ):
@@ -58,13 +74,12 @@ class VehicleData:
             self.logging_config = VehicleLoggingConfig()
         else:
             self.logging_config = logging_config
-        self.destination = destination
+        self.params = params
+        self.world = world
         self.map = map
-        self.meters_for_safe_pullover = meters_for_safe_pullover
         self.vehicle = vehicle
-        self.cruise_control_agent = BasicAgent(self.vehicle)
-        self.cruise_control_agent.ignore_traffic_lights()
-        self.cruise_control_agent.set_target_speed(50)  # pyright: ignore[reportUnknownMemberType]
+        self.cruise_control_agent = BehaviorAgent(self.vehicle, map_inst=map)
+        self.global_route_planner = self.cruise_control_agent.get_global_planner()
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
@@ -93,9 +108,9 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
         self,
         pygame_io: PygameIO,
         vehicle: Vehicle,
-        destination: Location,
+        world: World,
         map: Map,
-        meters_for_safe_pullover: float,
+        params: VehicleParams,
         driver_camera_stream: CameraStream,
         logging_config: VehicleLoggingConfig | None = None,
     ):
@@ -104,9 +119,9 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
             VehicleData(
                 pygame_io=pygame_io,
                 vehicle=vehicle,
-                destination=destination,
+                world=world,
                 map=map,
-                meters_for_safe_pullover=meters_for_safe_pullover,
+                params=params,
                 driver_camera_stream=driver_camera_stream,
                 logging_config=logging_config,
             ),
@@ -214,8 +229,13 @@ class CruiseControlS(VehicleState):
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        data.cruise_control_agent.set_destination(data.destination)
-        return
+        # Using cached map and global_route_planner to avoid expensive blocking call
+        data.cruise_control_agent = BehaviorAgent(
+            data.vehicle, map_inst=data.map, grp_inst=data.global_route_planner
+        )
+        data.cruise_control_agent.ignore_traffic_lights()
+        data.cruise_control_agent.set_target_speed(data.params.cruise_target_speed)  # pyright: ignore[reportUnknownMemberType]
+        data.cruise_control_agent.set_destination(data.params.destination)
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
@@ -289,7 +309,7 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
 
 def _exit_detected(data: VehicleData)-> bool:
     curr_waypoint = data.map.get_waypoint(data.vehicle.get_location())
-    for m in range(1, int(data.meters_for_safe_pullover)):
+    for m in range(1, int(data.params.meters_for_safe_pullover)):
         available_paths = curr_waypoint.next(m)
         if available_paths.__len__() > 1:
             return True
@@ -317,7 +337,7 @@ class PullOverPreparationS(VehicleState):
             VehicleStateAction(
                 condition=lambda data, ctx: _exit_detected(data),
                 action=lambda data, ctx: print(
-                    f"Exit detected in {data.meters_for_safe_pullover} meters"
+                    f"Exit detected in {data.params.meters_for_safe_pullover} meters"
                 ),
             )
         ]
