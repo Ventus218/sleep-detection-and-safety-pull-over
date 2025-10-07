@@ -8,7 +8,7 @@ from inattention.detector import WebcamCameraStream
 from pygame_io import PygameIO
 from remove_vehicles_and_sensors import remove_vehicles_and_sensors
 from vehicle_logging_config import VehicleLoggingConfig
-from vehicle_state_machine import VehicleStateMachine
+from vehicle_state_machine import VehicleParams, VehicleStateMachine
 
 FRAMERATE = 20
 DT = 1 / FRAMERATE
@@ -71,10 +71,13 @@ try:
     state_machine = VehicleStateMachine(
         pygame_io=io,
         vehicle=vehicle,
-        destination=destination,
         world=world,
         map=map,
-        meters_for_safe_pullover=50,
+        params=VehicleParams(
+            destination=destination,
+            meters_for_safe_pullover=50,
+            cruise_target_speed_kmh=100,
+        ),
         driver_camera_stream=driver_camera_stream,
         logging_config=VehicleLoggingConfig(log_entries=True),
     )
