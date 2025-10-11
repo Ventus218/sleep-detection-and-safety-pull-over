@@ -2,7 +2,16 @@ from enum import StrEnum, auto
 from typing import cast, override
 
 import pygame
-from carla import Location, Map, Vector3D, Vehicle, VehicleControl, World
+from carla import (
+    LaneType,
+    Location,
+    Map,
+    Vector3D,
+    Vehicle,
+    VehicleControl,
+    Waypoint,
+    World,
+)
 
 from agents.navigation.basic_agent import BasicAgent
 from agents.navigation.global_route_planner import GlobalRoutePlanner
@@ -311,12 +320,43 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
     return False
 
 
-def _exit_detected(data: VehicleData) -> bool:
+def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
+    return w1.transform.get_forward_vector().dot(w2.transform.get_forward_vector()) > 0
+
+
+def _waypoints_same_road(w1: Waypoint, w2: Waypoint) -> bool:
+    return w1.road_id == w2.road_id
+
+
+def _junction_detected(data: VehicleData) -> bool:
     curr_waypoint = data.map.get_waypoint(data.vehicle.get_location())
-    for m in range(1, int(data.params.meters_for_safe_pullover)):
-        available_paths = curr_waypoint.next(m)
-        if available_paths.__len__() > 1:
-            return True
+
+    # Junctions are road segments and as such they include both sides, so checking if
+    # the waypoint is part of a junction is not enough because we don't care if the
+    # actual exit or entry is on the other side of the road
+    if curr_waypoint.is_junction:
+        junction_waypoints = curr_waypoint.get_junction().get_waypoints(LaneType.Any)
+
+        # Here we take just those waypoints that point to the same direction as the vehicle
+        junction_waypoints = filter(
+            lambda t: _waypoints_roughly_same_direction(t[0], curr_waypoint),
+            junction_waypoints,
+        )
+
+        # Here we search for a waypoint that is part of a different road than the vehicle one
+        waypoint_in_different_road = next(
+            filter(
+                lambda t: not _waypoints_same_road(t[0], curr_waypoint)
+                or not _waypoints_same_road(t[1], curr_waypoint),
+                junction_waypoints,
+            ),
+            None,
+        )
+
+        # If there is at least one waypoint that is part of a different road then
+        # we assume there is an actual junction on the vehicle side of the road
+        return waypoint_in_different_road is not None
+
     return False
 
 
@@ -338,12 +378,15 @@ class PullOverPreparationS(VehicleState):
 
     @override
     def actions(self) -> list[VehicleStateAction]:
+        def action(data: VehicleData, ctx: VehicleContext):
+            print("Exit")
+            data.world.debug.draw_string(
+                data.vehicle.get_location() + Location(z=2), "Exit detected"
+            )
+
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: _exit_detected(data),
-                action=lambda data, ctx: print(
-                    f"Exit detected in {data.params.meters_for_safe_pullover} meters"
-                ),
+                condition=lambda data, ctx: _junction_detected(data), action=action
             )
         ]
 
