@@ -19,13 +19,13 @@ client = Client(host, port)
 client.set_timeout(120)  # pyright: ignore[reportUnknownMemberType]
 world = client.get_world()
 
-match client.load_world_if_different("Town12"):  # pyright: ignore[reportUnknownMemberType]
-    case None:
-        world = client.get_world()
-    case w:  # pyright: ignore[reportUnknownVariableType]
-        world = cast(World, w)
 
+world = client.get_world()
 world_map = world.get_map()
+if not world_map.name.endswith("Town12"):
+    world = client.load_world("Town12")
+    world_map = world.get_map()
+
 
 for i in range(3):
     _ = world.wait_for_tick(60)
@@ -41,11 +41,9 @@ emergency_waypoint = cast(
 emergency_waypoints = emergency_waypoint.next_until_lane_end(waypoint_interval)
 
 while True:
-    time.sleep(5)
     waypoints = waypoint.next_until_lane_end(10)
     for w in waypoints:
         world.debug.draw_string(w.transform.location, "W", life_time=5)
-    waypoint.next
     for w in emergency_waypoints:
         world.debug.draw_string(
             w.transform.location, "W", color=Color(0, 255, 0), life_time=5
