@@ -34,16 +34,19 @@ class VehicleParams:
     destination: Location
     meters_for_safe_pullover: float
     cruise_target_speed_kmh: float
+    pulling_over_acceleration: float
 
     def __init__(
         self,
         destination: Location,
         meters_for_safe_pullover: float,
         cruise_target_speed_kmh: float,
+        pulling_over_acceleration: float,
     ):
         self.destination = destination
         self.meters_for_safe_pullover = meters_for_safe_pullover
         self.cruise_target_speed_kmh = cruise_target_speed_kmh
+        self.pulling_over_acceleration = pulling_over_acceleration
 
 
 class VehicleData:
@@ -52,10 +55,14 @@ class VehicleData:
     map: Map
     params: VehicleParams
 
+    last_step_speed: Vector3D = Vector3D()
     speed: Vector3D = Vector3D()
+    acceleration: float = 0
+
 
     vehicle: Vehicle
     vehicle_control: VehicleControl = VehicleControl()
+    last_step_vehicle_control: VehicleControl = VehicleControl()
     """
     The Vehicle control to be applied at the end of each step
     """
@@ -162,7 +169,12 @@ class WrapperS(State[VehicleData, VehicleTimers]):
 
     @override
     def on_early_do(self, data: VehicleData, ctx: VehicleContext):
+        data.last_step_speed = data.speed
         data.speed = data.vehicle.get_velocity()
+        data.acceleration = (
+            data.speed.length() - data.last_step_speed.length()
+        ) / ctx.dt
+        data.last_step_vehicle_control = data.vehicle_control
         data.vehicle_control = VehicleControl()
         data.pygame_events = data.pygame_io.update()
         data.manual_control.update(data.pygame_events)
@@ -430,7 +442,7 @@ class PullingOverS(VehicleState):
 
 def _emergency_lane_reached(data: VehicleData) -> bool:
     # TODO
-    return True
+    return False
 
 
 class EmergencyLaneNotReachedS(VehicleState):
@@ -445,14 +457,27 @@ class EmergencyLaneNotReachedS(VehicleState):
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
-        # TODO: choose appropriate speed and braking power
-        if data.speed.length() > 10 / 3.6:
-            data.vehicle_control.brake = 0.2
+        if data.speed.length() > (10 / 3.6):
+            accel_delta = data.params.pulling_over_acceleration - data.acceleration
+            if accel_delta > 0.1:
+                data.vehicle_control.brake = max(
+                    data.last_step_vehicle_control.brake - 0.1, 0
+                )
+            elif accel_delta < 0.1:
+                data.vehicle_control.brake = min(
+                    data.last_step_vehicle_control.brake + 0.1, 1
+                )
+
+            # print("acceleration:", data.acceleration)
+            # print("acceleration delta:", accel_delta)
+            print("speed :", data.speed.length() * 3.6)
+            print("brakes:", data.vehicle_control.brake)
+
         # TODO: activate turn signals
         # TODO: amount of steering should be adjusted based on:
         #       - vehicle speed
         #       - how fast the vehicle is approaching the guardrail
-        data.vehicle_control.steer = 0.1
+        # data.vehicle_control.steer  0.05
 
 
 class EmergencyLaneReachedS(VehicleState):

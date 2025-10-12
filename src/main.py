@@ -77,6 +77,7 @@ try:
             destination=destination,
             meters_for_safe_pullover=50,
             cruise_target_speed_kmh=100,
+            pulling_over_acceleration=-2.0,
         ),
         driver_camera_stream=driver_camera_stream,
         logging_config=VehicleLoggingConfig(log_entries=True),
