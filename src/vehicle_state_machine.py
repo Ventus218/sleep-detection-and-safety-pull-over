@@ -327,35 +327,66 @@ def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
 def _waypoints_same_road(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.road_id == w2.road_id
 
-
 def _junction_detected(data: VehicleData) -> bool:
-    curr_waypoint = data.map.get_waypoint(data.vehicle.get_location())
+    # We use the target waypoint as getting a waypoint under the vehicle position
+    # may return a waypoint that is part of another overlapping lane
+    target_waypoint = cast(
+        Waypoint, data.cruise_control_agent.get_local_planner().target_waypoint
+    )
 
-    # Junctions are road segments and as such they include both sides, so checking if
-    # the waypoint is part of a junction is not enough because we don't care if the
-    # actual exit or entry is on the other side of the road
-    if curr_waypoint.is_junction:
-        junction_waypoints = curr_waypoint.get_junction().get_waypoints(LaneType.Any)
-
-        # Here we take just those waypoints that point to the same direction as the vehicle
-        junction_waypoints = filter(
-            lambda t: _waypoints_roughly_same_direction(t[0], curr_waypoint),
-            junction_waypoints,
+    # Here we find a waypoint that is in the exact position of the car but on the correct lane
+    distance_from_car = target_waypoint.transform.location.distance(
+        data.vehicle.get_location()
+    )
+    curr_waypoint = next(
+        filter(
+            lambda w: w.lane_id == target_waypoint.lane_id,
+            target_waypoint.previous(distance_from_car),
         )
+    )
 
-        # Here we search for a waypoint that is part of a different road than the vehicle one
-        waypoint_in_different_road = next(
+    # Here we compute N waypoints ahead of the vehicle to check if they are part of a junction
+    waypoints = [curr_waypoint]
+
+    # Here get waypoints ahead of the vehicle every 10 meters up to the specified distance
+    # Highway junctions in carla are never shorter than 10 meters
+    meters_ahead = 0
+    while meters_ahead < data.params.meters_for_safe_pullover:
+        meters_ahead = meters_ahead + 10
+        w = next(
             filter(
-                lambda t: not _waypoints_same_road(t[0], curr_waypoint)
-                or not _waypoints_same_road(t[1], curr_waypoint),
-                junction_waypoints,
-            ),
-            None,
+                lambda w: w.lane_id == curr_waypoint.lane_id,
+                curr_waypoint.next(meters_ahead),
+            )
         )
+        waypoints.append(w)
 
-        # If there is at least one waypoint that is part of a different road then
-        # we assume there is an actual junction on the vehicle side of the road
-        return waypoint_in_different_road is not None
+    for w in waypoints:
+        # Junctions are road segments and as such they include both sides, so checking if
+        # the waypoint is part of a junction is not enough because we don't care if the
+        # actual exit or entry is on the other side of the road
+        if w.is_junction:
+            junction_waypoints = w.get_junction().get_waypoints(LaneType.Any)
+
+            # Here we take just those waypoints that point to the same direction as the vehicle
+            junction_waypoints = filter(
+                lambda t: _waypoints_roughly_same_direction(t[0], w),
+                junction_waypoints,
+            )
+
+            # Here we search for a waypoint that is part of a different road than the vehicle one
+            waypoint_in_different_road = next(
+                filter(
+                    lambda t: not _waypoints_same_road(t[0], w)
+                    or not _waypoints_same_road(t[1], w),
+                    junction_waypoints,
+                ),
+                None,
+            )
+
+            # If there is at least one waypoint that is part of a different road then
+            # we assume there is an actual junction on the vehicle side of the road
+            return waypoint_in_different_road is not None
 
     return False
 
@@ -378,15 +409,12 @@ class PullOverPreparationS(VehicleState):
 
     @override
     def actions(self) -> list[VehicleStateAction]:
-        def action(data: VehicleData, ctx: VehicleContext):
-            print("Exit")
-            data.world.debug.draw_string(
-                data.vehicle.get_location() + Location(z=2), "Exit detected"
-            )
-
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: _junction_detected(data), action=action
+                condition=lambda data, ctx: _junction_detected(data),
+                action=lambda data, ctx: data.world.debug.draw_string(
+                    data.vehicle.get_location() + Location(z=2), "Junction detected"
+                ),
             )
         ]
 
