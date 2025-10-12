@@ -250,21 +250,6 @@ class CruiseControlS(VehicleState):
             )
         ]
 
-    @override
-    def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        # Using cached map and global_route_planner to avoid expensive blocking call
-        data.cruise_control_agent = BasicAgent(
-            data.vehicle, map_inst=data.map, grp_inst=data.global_route_planner
-        )
-        data.cruise_control_agent.ignore_traffic_lights()
-        data.cruise_control_agent.follow_speed_limits(False)
-        data.cruise_control_agent.set_target_speed(data.params.cruise_target_speed_kmh)  # pyright: ignore[reportUnknownMemberType]
-        data.cruise_control_agent.set_destination(data.params.destination)
-
-    @override
-    def on_do(self, data: VehicleData, ctx: VehicleContext):
-        data.vehicle_control = data.cruise_control_agent.run_step()
-
 
 # ========== LANE_KEEPING ==========
 
@@ -288,6 +273,21 @@ class LaneKeepingS(VehicleState):
                 ctx: data.dashboard_buttons.force_pullover_button_pressed,
             ),
         ]
+
+    @override
+    def on_entry(self, data: VehicleData, ctx: VehicleContext):
+        # Using cached map and global_route_planner to avoid expensive blocking call
+        data.cruise_control_agent = BasicAgent(
+            data.vehicle, map_inst=data.map, grp_inst=data.global_route_planner
+        )
+        data.cruise_control_agent.ignore_traffic_lights()
+        data.cruise_control_agent.follow_speed_limits(False)
+        data.cruise_control_agent.set_target_speed(data.params.cruise_target_speed_kmh)  # pyright: ignore[reportUnknownMemberType]
+        data.cruise_control_agent.set_destination(data.params.destination)
+
+    @override
+    def on_do(self, data: VehicleData, ctx: VehicleContext):
+        data.vehicle_control = data.cruise_control_agent.run_step()
 
 
 def _inattention_detected(data: VehicleData) -> bool:
