@@ -4,13 +4,14 @@ from typing import cast, override
 
 import pygame
 from carla import (
-    Color,
+    AckermannControllerSettings,
     LaneType,
     Location,
     Map,
     Transform,
     Vector3D,
     Vehicle,
+    VehicleAckermannControl,
     VehicleControl,
     Waypoint,
     World,
@@ -62,9 +63,9 @@ class VehicleData:
     speed: Vector3D = Vector3D()
     acceleration: float = 0
 
-
     vehicle: Vehicle
     vehicle_control: VehicleControl = VehicleControl()
+    vehicle_ackermann_control: VehicleAckermannControl | None = None
     last_step_vehicle_control: VehicleControl = VehicleControl()
     """
     The Vehicle control to be applied at the end of each step
@@ -153,9 +154,14 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
     def step(self, dt: float) -> bool:
         result = super().step(dt)
         if self._vehicle_logging_config().log_main_vehicle_controls:
-            self._vehicle_log("throttle:", self._data.vehicle_control.throttle)
-            self._vehicle_log("brake:", self._data.vehicle_control.brake)
-            self._vehicle_log("steer:", self._data.vehicle_control.steer)
+            control = self._data.vehicle.get_control()
+            self._vehicle_log("accel:", self._data.acceleration)
+            self._vehicle_log("speed:", self._data.speed.length() * 3.6, "km/h")
+            self._vehicle_log("throt:", control.throttle)
+            self._vehicle_log("brake:", control.brake)
+            self._vehicle_log("steer:", control.steer)
+            self._vehicle_log("gear :", control.gear)
+            print()
         return result
 
     def _vehicle_log(self, *values: object):
@@ -179,6 +185,7 @@ class WrapperS(State[VehicleData, VehicleTimers]):
         ) / ctx.dt
         data.last_step_vehicle_control = data.vehicle_control
         data.vehicle_control = VehicleControl()
+        data.vehicle_ackermann_control = None
         data.pygame_events = data.pygame_io.update()
         data.manual_control.update(data.pygame_events)
         data.dashboard_buttons.update(data.pygame_events)
@@ -186,6 +193,8 @@ class WrapperS(State[VehicleData, VehicleTimers]):
     @override
     def on_late_do(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle.apply_control(data.vehicle_control)
+        if data.vehicle_ackermann_control is not None:
+            data.vehicle.apply_ackermann_control(data.vehicle_ackermann_control)  # pyright: ignore[reportUnknownMemberType]
 
     @override
     def transitions(self) -> list[VehicleTransition]:
@@ -465,58 +474,44 @@ def _emergency_lane_reached(data: VehicleData) -> bool:
     )
     return waypoint.lane_type == LaneType.Shoulder and signed_lateral_distance >= 0
 
-def _value_between_0_and_1(a: float) -> float:
-    return min(max(a, 0), 1)
+def _clamp(a: float, min_:float, max_:float) -> float:
+    return min(max(a, min_), max_)
 
-def _brake_to_target_deceleration(data: VehicleData, ctx: VehicleContext):
-    accel_delta = data.params.pulling_over_acceleration - data.acceleration
-    braking_aggressiveness = 4  # Coefficient to finetune
-    brake = (
-        data.last_step_vehicle_control.brake
-        - accel_delta * ctx.dt * braking_aggressiveness
-    )
+def _steer_to_radians(data: VehicleData, steer: float) -> float:
+    max_steer_angle_deg = data.vehicle.get_physics_control().wheels[0].max_steer_angle
+    steer = _clamp(steer, -1, 1)
+    return math.radians(max_steer_angle_deg) * steer
 
-    # We can set neutral and just brake
-    data.vehicle_control.manual_gear_shift = True
-    data.vehicle_control.gear = 0
-    data.vehicle_control.brake = _value_between_0_and_1(brake)
-
-    # # Or we can try to balance brakes and throttle
-    # # It is a bit less precise due to engine brake changing with gears
-    # throttle_aggressiveness = 2  # Coefficient to finetune
-    # throttle = (
-    #     data.last_step_vehicle_control.throttle
-    #     + accel_delta * ctx.dt * throttle_aggressiveness
-    # )
-    # if accel_delta > 0:
-    #     # Need to accelerate
-    #     if data.last_step_vehicle_control.brake > 0:
-    #         data.vehicle_control.brake = _value_between_0_and_1(brake)
-    #     else:
-    #         data.vehicle_control.throttle = _value_between_0_and_1(throttle)
-    # else:
-    #     # Need to decelerate
-    #     if data.last_step_vehicle_control.throttle > 0:
-    #         data.vehicle_control.throttle = _value_between_0_and_1(throttle)
-    #     else:
-    #         data.vehicle_control.brake = _value_between_0_and_1(brake)
-
-def _accelerate_to_target_speed(
-    data: VehicleData, ctx: VehicleContext, target_speed_kmh: float
-):
-    speed_delta = (target_speed_kmh / 3.6) - data.speed.length()
-    throttle_aggressiveness = 2  # Coefficient to finetune
-    throttle = (
-        data.last_step_vehicle_control.throttle
-        + speed_delta * throttle_aggressiveness * ctx.dt
-    )
-    data.vehicle_control.throttle = _value_between_0_and_1(throttle)
-
-def _keep_target_speed(data: VehicleData, ctx: VehicleContext, speed_kmh: float):
-    if data.speed.length() * 3.6 > speed_kmh:
-        _brake_to_target_deceleration(data, ctx)
+def _keep_target_speed(data: VehicleData, speed_kmh: float):
+    speed_ms = speed_kmh / 3.6
+    if data.speed.length() > speed_ms + 1:
+        data.vehicle.apply_ackermann_controller_settings(  # pyright: ignore[reportUnknownMemberType]
+            AckermannControllerSettings(  # pyright: ignore[reportArgumentType]
+                speed_kp=0.15,
+                speed_ki=0.0,
+                speed_kd=0.25,
+                accel_kp=1.0,
+                accel_ki=0.0,
+                accel_kd=0.2,
+            )
+        )
+        acc = -2
     else:
-        _accelerate_to_target_speed(data, ctx, speed_kmh - 2)
+        # Reset settings to default
+        data.vehicle.apply_ackermann_controller_settings(  # pyright: ignore[reportUnknownMemberType]
+            AckermannControllerSettings(  # pyright: ignore[reportArgumentType]
+                speed_kp=0.15,
+                speed_ki=0.0,
+                speed_kd=0.25,
+                accel_kp=0.01,
+                accel_ki=0.0,
+                accel_kd=0.01,
+            )
+        )
+        acc = 0
+    data.vehicle_ackermann_control = VehicleAckermannControl(
+        acceleration=acc, speed=speed_ms
+    )
 
 class EmergencyLaneNotReachedS(VehicleState):
     @override
@@ -530,16 +525,13 @@ class EmergencyLaneNotReachedS(VehicleState):
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
-        _keep_target_speed(data, ctx, 10)
+        _keep_target_speed(data, 10)
 
         # Should be roughly between 0 and 1
         speed_coeff = data.speed.length() / (50 / 3.6)
 
         # TODO: activate turn signals
-        # TODO: amount of steering should be adjusted based on:
-        #       - vehicle speed
-        #       - how fast the vehicle is approaching the guardrail
-        data.vehicle_control.steer = 0.1 * (1 - speed_coeff)
+        data.vehicle_ackermann_control.steer = _steer_to_radians(data, 0.1 * (1 - speed_coeff))
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -555,27 +547,26 @@ class EmergencyLaneReachedS(VehicleState):
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
         waypoint = data.map.get_waypoint(data.vehicle.get_location())
-        if waypoint.transform.get_forward_vector().dot(data.vehicle.get_transform().get_forward_vector()) < 0.999:
-            _keep_target_speed(data, ctx, 10)
-
-            # Should be roughly between 0 and 1
-            speed_coeff = data.speed.length() / (50 / 3.6)
-
-            vehicle_front = _vehicle_front(data)
-            lane_w = data.map.get_waypoint(vehicle_front, lane_type=LaneType.Any)
-            data.vehicle_control.steer = -_signed_lateral_distance(
-                vehicle_front, lane_w.transform
-            ) * (1 - speed_coeff)
-
+        if (
+            waypoint.transform.get_forward_vector().dot(
+                data.vehicle.get_transform().get_forward_vector()
+            )
+            < 0.999
+        ):
+            _keep_target_speed(data, 10)
         else:
-            # _brake_to_target_deceleration(data, ctx)
-            _keep_target_speed(data, ctx, 0)
+            _keep_target_speed(data, 0)
 
+        # Should be roughly between 0 and 1
+        speed_coeff = data.speed.length() / (50 / 3.6)
 
-        # TODO: maybe it would be good to continue adjusting the
-        #       steering in order not to exit the emergency lane
-        #       or hit the guardrail (especially when pulling over
-        #       when the road is turning
+        vehicle_front = _vehicle_front(data)
+        lane_w = data.map.get_waypoint(vehicle_front, lane_type=LaneType.Any)
+        data.vehicle_ackermann_control.steer = _steer_to_radians(
+            data,
+            -_signed_lateral_distance(vehicle_front, lane_w.transform)
+            * (1 - speed_coeff),
+        )
 
 
 # ========== STOPPED ==========
