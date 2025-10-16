@@ -528,8 +528,7 @@ def _clamp(a: float, min_: float, max_: float) -> float:
 
 def _steer_to_radians(data: VehicleData, steer: float) -> float:
     max_steer_angle_deg = data.vehicle.get_physics_control().wheels[0].max_steer_angle
-    steer = _clamp(steer, -1, 1)
-    return math.radians(max_steer_angle_deg) * steer
+    return math.radians(max_steer_angle_deg) * _clamp(steer, -1, 1)
 
 
 def _keep_target_speed(data: VehicleData, speed_kmh: float):
