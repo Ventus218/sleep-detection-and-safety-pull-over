@@ -583,9 +583,16 @@ class EmergencyLaneNotReachedS(VehicleState):
         speed_coeff = data.speed_kmh / 50
 
         # TODO: activate turn signals
-        data.vehicle_ackermann_control.steer = _steer_to_radians(
-            data, 0.1 * (1 - speed_coeff)
-        )
+        if data.vehicle_ackermann_control is not None:
+            data.vehicle_ackermann_control = VehicleAckermannControl(
+                acceleration=data.vehicle_ackermann_control.acceleration,
+                speed=data.vehicle_ackermann_control.speed,
+                jerk=data.vehicle_ackermann_control.jerk,
+                steer_speed=data.vehicle_ackermann_control.steer_speed,
+                steer=_steer_to_radians(data, 0.1 * (1 - speed_coeff)),
+            )
+        else:
+            raise Exception("Expected to be using ackermann vehicle control")
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -616,11 +623,20 @@ class EmergencyLaneReachedS(VehicleState):
 
         vehicle_front = _vehicle_front(data)
         lane_w = data.map.get_waypoint(vehicle_front, lane_type=LaneType.Any)
-        data.vehicle_ackermann_control.steer = _steer_to_radians(
-            data,
-            -_signed_lateral_distance(vehicle_front, lane_w.transform)
-            * (1 - speed_coeff),
-        )
+        if data.vehicle_ackermann_control is not None:
+            data.vehicle_ackermann_control = VehicleAckermannControl(
+                acceleration=data.vehicle_ackermann_control.acceleration,
+                speed=data.vehicle_ackermann_control.speed,
+                jerk=data.vehicle_ackermann_control.jerk,
+                steer_speed=data.vehicle_ackermann_control.steer_speed,
+                steer=_steer_to_radians(
+                    data,
+                    -_signed_lateral_distance(vehicle_front, lane_w.transform)
+                    * (1 - speed_coeff),
+                ),
+            )
+        else:
+            raise Exception("Expected to be using ackermann vehicle control")
 
 
 # ========== STOPPED ==========
