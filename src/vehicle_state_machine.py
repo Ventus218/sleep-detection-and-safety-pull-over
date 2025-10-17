@@ -115,6 +115,9 @@ class VehicleData:
     cruise_control_agent: BasicAgent
     global_route_planner: GlobalRoutePlanner
 
+    pull_over_potential_field_coeff = 1
+    road_margin_repulsive_potential_field_coeff = 2
+
     inattention_detector: InattentionDetector
     """
     Detector used to spot inattentive behaviours in the driver.
@@ -490,12 +493,73 @@ class PullOverPreparationS(VehicleState):
 
 # ========== PULLING_OVER ==========
 
+def _changeVehicleAckermannControl(
+    control: VehicleAckermannControl,
+    steer: float | None = None,
+    steer_speed: float | None = None,
+    speed: float | None = None,
+    acceleration: float | None = None,
+    jerk: float | None = None,
+) -> VehicleAckermannControl:
+    return VehicleAckermannControl(
+        steer=steer if steer is not None else control.steer,
+        steer_speed=steer_speed if steer_speed is not None else control.steer_speed,
+        speed=speed if speed is not None else control.speed,
+        acceleration=acceleration if acceleration is not None else control.acceleration,
+        jerk=jerk if jerk is not None else control.jerk,
+    )
+
 
 class PullingOverS(VehicleState):
     @override
     def children(self) -> list[VehicleState]:
         return [EmergencyLaneNotReachedS(), EmergencyLaneReachedS()]
 
+    @override
+    def on_do(self, data: VehicleData, ctx: VehicleContext):
+        # Here we use a motor schemas / potential fields approach to achieve
+        # smooth and robust pull over manuver.
+        # Two potential fields will influence the ego vehicle:
+        # - A transversal field which pushes the vehicle to the emergency lane (pull_over_field)
+        #   with constant magnitude
+        # - A transversal field which pushes the vehicle away from the road margin (counter_field)
+        #   with magnitude inversely proportional to the distance from the road margin (1/d)
+        # Each field has an associated coefficient which tuning is fundamental as it determines
+        # where the vehicle will stabilize (see VehicleParams)
+
+        # In order to avoid excessive oscillating behavior the fields forces are evaluated
+        # a bit ahead of the vehicle
+        vehicle_front = _vehicle_front(data)
+        vehicle_front = Location(
+            vehicle_front + data.vehicle.get_transform().get_forward_vector() * 4
+        )
+        lane_w = cast(
+            Waypoint, data.map.get_waypoint(vehicle_front, lane_type=LaneType.Shoulder)
+        )
+
+        signed_lateral_distance = _signed_lateral_distance(
+            vehicle_front, lane_w.transform
+        )
+        pull_over_field = data.pull_over_potential_field_coeff
+        distance_from_right_margin = signed_lateral_distance - lane_w.lane_width / 2
+        counter_field = (
+            1
+            / distance_from_right_margin
+            * data.road_margin_repulsive_potential_field_coeff
+        )
+
+        # The steer must be adjusted with respect to the vehicle speed as a slower vehicle
+        # needs more steer in order to move laterally the same way a faster vehicle would do
+        # The coefficient should be roughly between 0 and 1 given the maximum pull over speed
+        speed_coeff = data.speed_kmh / data.params.max_pull_over_preparation_speed_kmh
+
+        data.vehicle_ackermann_control = VehicleAckermannControl(
+            steer_speed=0,
+            steer=_steer_to_radians(
+                data,
+                (pull_over_field + counter_field) * (1 - speed_coeff),
+            ),
+        )
 
 def _signed_lateral_distance(of: Location, to: Transform) -> float:
     target_rotation = to.rotation
@@ -560,9 +624,12 @@ def _keep_target_speed(data: VehicleData, speed_kmh: float):
             )
         )
         acc = 0
-    data.vehicle_ackermann_control = VehicleAckermannControl(
-        acceleration=acc, speed=speed_ms
-    )
+    if data.vehicle_ackermann_control is not None:
+        data.vehicle_ackermann_control = _changeVehicleAckermannControl(
+            data.vehicle_ackermann_control, acceleration=acc, speed=speed_ms
+        )
+    else:
+        raise Exception("Expected to be using ackermann vehicle control")
 
 
 class EmergencyLaneNotReachedS(VehicleState):
@@ -579,20 +646,6 @@ class EmergencyLaneNotReachedS(VehicleState):
     def on_do(self, data: VehicleData, ctx: VehicleContext):
         _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
 
-        # Should be roughly between 0 and 1
-        speed_coeff = data.speed_kmh / 50
-
-        # TODO: activate turn signals
-        if data.vehicle_ackermann_control is not None:
-            data.vehicle_ackermann_control = VehicleAckermannControl(
-                acceleration=data.vehicle_ackermann_control.acceleration,
-                speed=data.vehicle_ackermann_control.speed,
-                jerk=data.vehicle_ackermann_control.jerk,
-                steer_speed=data.vehicle_ackermann_control.steer_speed,
-                steer=_steer_to_radians(data, 0.1 * (1 - speed_coeff)),
-            )
-        else:
-            raise Exception("Expected to be using ackermann vehicle control")
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -617,26 +670,6 @@ class EmergencyLaneReachedS(VehicleState):
             _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
         else:
             _keep_target_speed(data, 0)
-
-        # Should be roughly between 0 and 1
-        speed_coeff = data.speed_kmh / 50
-
-        vehicle_front = _vehicle_front(data)
-        lane_w = data.map.get_waypoint(vehicle_front, lane_type=LaneType.Any)
-        if data.vehicle_ackermann_control is not None:
-            data.vehicle_ackermann_control = VehicleAckermannControl(
-                acceleration=data.vehicle_ackermann_control.acceleration,
-                speed=data.vehicle_ackermann_control.speed,
-                jerk=data.vehicle_ackermann_control.jerk,
-                steer_speed=data.vehicle_ackermann_control.steer_speed,
-                steer=_steer_to_radians(
-                    data,
-                    -_signed_lateral_distance(vehicle_front, lane_w.transform)
-                    * (1 - speed_coeff),
-                ),
-            )
-        else:
-            raise Exception("Expected to be using ackermann vehicle control")
 
 
 # ========== STOPPED ==========
