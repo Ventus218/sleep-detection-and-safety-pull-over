@@ -118,7 +118,9 @@ try:
     )
 
     radar = attach_radar(vehicle)
-    pcheck = SafePulloverChecker(radar, debug=True)
+
+    offset = float(vehicle.bounding_box.extent.y)
+    pcheck = SafePulloverChecker(radar, vehicle, 3.0, offset, safety_delay=1.0, debug=True)
 
     # Bind camera to pygame window
     camera.listen(lambda image: io.prepare_output_image(cast(Image, image)))
