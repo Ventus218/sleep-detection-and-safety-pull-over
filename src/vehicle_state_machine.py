@@ -50,6 +50,10 @@ class VehicleParams:
     Target braking acceleration for the vehicle while pulling over.
     Must be < 0.
     """
+    min_pull_over_speed: float = 5
+    """
+    Miminum speed at which the vehicle will move when pulling over
+    """
 
     pull_over_potential_field_coeff: float = 1.1
     road_margin_repulsive_potential_field_coeff: float = 2
@@ -658,7 +662,7 @@ class EmergencyLaneNotReachedS(VehicleState):
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
-        _keep_target_speed(data, 5)
+        _keep_target_speed(data, data.params.min_pull_over_speed)
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -680,7 +684,7 @@ class EmergencyLaneReachedS(VehicleState):
             )
             < 0.999
         ):
-            _keep_target_speed(data, 5)
+            _keep_target_speed(data, data.params.min_pull_over_speed)
         else:
             _keep_target_speed(data, 0)
 
