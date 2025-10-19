@@ -8,6 +8,7 @@ from carla import (
     LaneType,
     Location,
     Map,
+    TrafficManager,
     Transform,
     Vector3D,
     Vehicle,
@@ -17,8 +18,6 @@ from carla import (
     World,
 )
 
-from agents.navigation.basic_agent import BasicAgent
-from agents.navigation.global_route_planner import GlobalRoutePlanner
 from inattention.detector import InattentionDetector
 from inattention.utils import CameraStream
 from pygame_dashboard_buttons import PygameDashboardButtons
@@ -35,7 +34,6 @@ from vehicle_logging_config import VehicleLoggingConfig
 
 
 class VehicleParams:
-    destination: Location
     sensors_max_range: float
     """
     Maximum forward range for sensors regarding safety pull over.
@@ -71,12 +69,10 @@ class VehicleParams:
 
     def __init__(
         self,
-        destination: Location,
         sensors_max_range: float,
         cruise_target_speed_kmh: float,
         max_pull_over_acceleration: float,
     ):
-        self.destination = destination
         self.sensors_max_range = sensors_max_range
         if cruise_target_speed_kmh < 0:
             raise Exception("cruise target speed must be positive or 0")
@@ -90,6 +86,7 @@ class VehicleData:
     logging_config: VehicleLoggingConfig
     world: World
     map: Map
+    traffic_manager: TrafficManager
     params: VehicleParams
 
     speed: Vector3D = Vector3D()
@@ -98,6 +95,11 @@ class VehicleData:
     Deceleration that is computed once starting to pull over.
     It is the deceleration that should be used in order to stop in the right amount of space.
     It must not exceed the maximum pull over acceleration given in the params.
+    """
+    first_junction_distance: float | None = None
+    """
+    Distance from the first detected junction.
+    If None it means that no junction has beed detected within the sensor range
     """
 
     @property
@@ -118,8 +120,6 @@ class VehicleData:
     manual_control: PygameVehicleControl
     dashboard_buttons: PygameDashboardButtons = PygameDashboardButtons()
     pygame_events: list[pygame.event.Event] = []
-    cruise_control_agent: BasicAgent
-    global_route_planner: GlobalRoutePlanner
 
     inattention_detector: InattentionDetector
     """
@@ -132,6 +132,7 @@ class VehicleData:
         vehicle: Vehicle,
         world: World,
         map: Map,
+        traffic_manager: TrafficManager,
         params: VehicleParams,
         driver_camera_stream: CameraStream,
         logging_config: VehicleLoggingConfig | None,
@@ -143,9 +144,8 @@ class VehicleData:
         self.params = params
         self.world = world
         self.map = map
+        self.traffic_manager = traffic_manager
         self.vehicle = vehicle
-        self.cruise_control_agent = BasicAgent(self.vehicle, map_inst=map)
-        self.global_route_planner = self.cruise_control_agent.get_global_planner()
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
@@ -176,6 +176,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
         vehicle: Vehicle,
         world: World,
         map: Map,
+        traffic_manager: TrafficManager,
         params: VehicleParams,
         driver_camera_stream: CameraStream,
         logging_config: VehicleLoggingConfig | None = None,
@@ -187,6 +188,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
                 vehicle=vehicle,
                 world=world,
                 map=map,
+                traffic_manager=traffic_manager,
                 params=params,
                 driver_camera_stream=driver_camera_stream,
                 logging_config=logging_config,
@@ -327,19 +329,16 @@ class LaneKeepingS(VehicleState):
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        # Using cached map and global_route_planner to avoid expensive blocking call
-        data.cruise_control_agent = BasicAgent(
-            data.vehicle, map_inst=data.map, grp_inst=data.global_route_planner
+        data.traffic_manager.auto_lane_change(data.vehicle, False)  # pyright: ignore[reportUnknownMemberType]
+        data.traffic_manager.set_desired_speed(
+            data.vehicle, data.params.cruise_target_speed_kmh
         )
-        data.cruise_control_agent.ignore_traffic_lights()
-        data.cruise_control_agent.follow_speed_limits(False)
-        data.cruise_control_agent.set_target_speed(data.params.cruise_target_speed_kmh)  # pyright: ignore[reportUnknownMemberType]
-        data.cruise_control_agent.set_destination(data.params.destination)
+        data.traffic_manager.vehicle_percentage_speed_difference(data.vehicle, -100)  # pyright: ignore[reportUnknownMemberType]
+        data.vehicle.set_autopilot(True, data.traffic_manager.get_port())
 
     @override
-    def on_do(self, data: VehicleData, ctx: VehicleContext):
-        data.vehicle_control = data.cruise_control_agent.run_step()
-
+    def on_exit(self, data: VehicleData, ctx: VehicleContext):
+        data.vehicle.set_autopilot(False, data.traffic_manager.get_port())
 
 def _inattention_detected(data: VehicleData) -> bool:
     return data.inattention_detector.detect()
@@ -385,12 +384,15 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
     - Ability to stop the vehicle before any junction
     """
     # TODO add check of obstacles
-    junction_distance = _first_junction_detected_distance(data)
     max_stop_dist = _max_stopping_distance(data)
-    return max_stop_dist <= data.params.sensors_max_range and (
-        junction_distance is None or junction_distance > max_stop_dist
+    return (
+        max_stop_dist <= data.params.sensors_max_range
+        and _right_lane_is_shoulder(data)
+        and (
+            data.first_junction_distance is None
+            or data.first_junction_distance > max_stop_dist
+        )
     )
-
 
 def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.transform.get_forward_vector().dot(w2.transform.get_forward_vector()) > 0
@@ -399,24 +401,28 @@ def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
 def _waypoints_same_road(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.road_id == w2.road_id
 
+def _right_lane_is_shoulder(data: VehicleData) -> bool:
+    right_lane = _curr_waypoint(data).get_right_lane()
+    return right_lane is not None and right_lane.lane_type == LaneType.Shoulder
 
-def _first_junction_detected_distance(data: VehicleData) -> float | None:
+def _curr_waypoint(data:VehicleData) -> Waypoint:
     # We use the target waypoint as getting a waypoint under the vehicle position
     # may return a waypoint that is part of another overlapping lane
-    target_waypoint = cast(
-        Waypoint, data.cruise_control_agent.get_local_planner().target_waypoint
-    )
+    target_waypoint = data.traffic_manager.get_next_action(data.vehicle)[1]
 
     # Here we find a waypoint that is in the exact position of the car but on the correct lane
     distance_from_car = target_waypoint.transform.location.distance(
         data.vehicle.get_location()
     )
-    curr_waypoint = next(
+    return next(
         filter(
             lambda w: w.lane_id == target_waypoint.lane_id,
             target_waypoint.previous(distance_from_car),
         )
     )
+
+def _first_junction_detected_distance(data: VehicleData) -> float | None:
+    curr_waypoint = _curr_waypoint(data)
 
     # Here we compute a waypoint every meter ahead of the vehicle to check if it is part of a junction
     meters_ahead = 0
@@ -477,9 +483,14 @@ class PullOverPreparationS(VehicleState):
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        data.cruise_control_agent.set_target_speed(  # pyright: ignore[reportUnknownMemberType]
-            data.params.max_pull_over_preparation_speed_kmh
+        data.traffic_manager.set_desired_speed(
+            data.vehicle, data.params.max_pull_over_preparation_speed_kmh
         )
+
+    @override
+    def on_do(self, data: VehicleData, ctx: VehicleContext):
+        # We cache this value as it is heavy to compute an needs to be used multiple times
+        data.first_junction_distance = _first_junction_detected_distance(data)
 
     @override
     def actions(self) -> list[VehicleStateAction]:
@@ -523,10 +534,9 @@ class PullingOverS(VehicleState):
         max_pull_over_speed = (
             min(data.params.max_pull_over_preparation_speed_kmh, data.speed_kmh) / 3.6
         )
-        first_junction_distance = _first_junction_detected_distance(data)
         pull_over_distance = (
-            first_junction_distance
-            if first_junction_distance is not None
+            data.first_junction_distance
+            if data.first_junction_distance is not None
             else _max_stopping_distance(data)
         )
         # We compute this value that is used in _keep_target_speed

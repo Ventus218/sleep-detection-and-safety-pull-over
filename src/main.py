@@ -40,6 +40,8 @@ settings = world.get_settings()
 settings.synchronous_mode = True
 settings.fixed_delta_seconds = DT
 _ = world.apply_settings(settings)
+traffic_manager = client.get_trafficmanager()
+traffic_manager.set_synchronous_mode(True)  # pyright: ignore[reportUnknownMemberType]
 
 blueprint_lib = world.get_blueprint_library()
 vehicle_bp = blueprint_lib.filter("vehicle.*")[0]
@@ -72,8 +74,8 @@ try:
         vehicle=vehicle,
         world=world,
         map=map,
+        traffic_manager=traffic_manager,
         params=VehicleParams(
-            destination=destination,
             sensors_max_range=50,
             cruise_target_speed_kmh=100,
             max_pull_over_acceleration=-2.0,
@@ -127,3 +129,4 @@ finally:
     settings.synchronous_mode = False
     settings.fixed_delta_seconds = 0
     _ = world.apply_settings(settings)
+    traffic_manager.set_synchronous_mode(False)  # pyright: ignore[reportUnknownMemberType]
