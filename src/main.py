@@ -2,7 +2,7 @@ import os
 import time
 from typing import cast
 
-from carla import Client, Image, Location, Rotation, Sensor, Transform, Vehicle
+from carla import AttachmentType, Client, Image, Location, Rotation, Sensor, Transform, Vehicle
 
 from inattention.detector import WebcamCameraStream
 from pygame_io import PygameIO
@@ -14,13 +14,13 @@ FRAMERATE = 20
 DT = 1 / FRAMERATE
 MAP = "Town12"
 HIGHWAY_SPAWN_POINT = Transform(Location(x=1473, y=3077.5, z=365), Rotation(yaw=180))
-HIGHWAY_DESTINATION = Location(x=448, y=3079, z=361)
 USE_PYGAME_CAMERA = False
 CAMERA_LOCATION_OFFSET = Location(x=-5, z=3)
 CAMERA_PITCH = -20
+SENSORS_MAX_RANGE = 50
+RADAR_SCAN_WIDTH = 3
 
 spawn_point = HIGHWAY_SPAWN_POINT
-destination = HIGHWAY_DESTINATION
 camera: Sensor | None = None
 
 host = os.environ.get("HOST", "localhost")
@@ -46,14 +46,25 @@ traffic_manager.set_synchronous_mode(True)  # pyright: ignore[reportUnknownMembe
 blueprint_lib = world.get_blueprint_library()
 vehicle_bp = blueprint_lib.filter("vehicle.*")[0]
 camera_bp = blueprint_lib.find("sensor.camera.rgb")
+radar_bp = world.get_blueprint_library().find('sensor.other.radar')
+
+# Right-size radar calibration
+radar_bp.set_attribute('horizontal_fov', str(85))
+radar_bp.set_attribute('vertical_fov', str(2))
+radar_bp.set_attribute('range', str(SENSORS_MAX_RANGE))
+radar_bp.set_attribute('points_per_second', str(1000))
+radar_location = Location(x=2.0, z=1.0)
+radar_rotation = Rotation(yaw=50)
+radar_transform = Transform(radar_location,radar_rotation)
+
 pygame_window_width = camera_bp.get_attribute("image_size_x").as_int()
 pygame_window_height = camera_bp.get_attribute("image_size_y").as_int()
-
 io = PygameIO(pygame_window_width, pygame_window_height)
 
 try:
-    # Spawn vehicle and move spectator behind it
+    # Spawn vehicle
     vehicle = cast(Vehicle, world.spawn_actor(vehicle_bp, spawn_point))
+
 
     if USE_PYGAME_CAMERA:
         camera = cast(Sensor, world.spawn_actor(camera_bp, Transform()))
@@ -69,6 +80,9 @@ try:
     spectator = world.get_spectator()
     spectator.set_location(vehicle.get_location())  # pyright: ignore[reportUnknownMemberType]
 
+    # Spawn radar
+    front_radar = cast(Sensor, world.spawn_actor(radar_bp, radar_transform))
+
     state_machine = VehicleStateMachine(
         pygame_io=io,
         vehicle=vehicle,
@@ -76,45 +90,61 @@ try:
         map=map,
         traffic_manager=traffic_manager,
         params=VehicleParams(
-            sensors_max_range=50,
+            sensors_max_range=SENSORS_MAX_RANGE,
             cruise_target_speed_kmh=100,
             max_pull_over_acceleration=-2.0,
+            radar_scan_width=RADAR_SCAN_WIDTH,
         ),
         driver_camera_stream=driver_camera_stream,
+        front_radar=front_radar,
         logging_config=VehicleLoggingConfig(log_entries=True),
     )
+
+    def move_to_with_local_offsets(target:Transform, location_offset: Location,rotation_offset: Rotation):
+        target = vehicle.get_transform()
+        computed_rotation = target.rotation
+        computed_rotation.pitch += rotation_offset.pitch
+        computed_rotation.roll += rotation_offset.roll
+        computed_rotation.yaw += rotation_offset.yaw
+
+        # Get local axis vectors
+        forward_vector = target.get_forward_vector()
+        right_vector = target.get_right_vector()
+        up_vector = target.get_up_vector()
+
+        # Apply the offset in the vehicle's local coordinate space
+        global_location_offset = (
+            forward_vector * location_offset.x
+            + right_vector * location_offset.y
+            + up_vector * location_offset.z
+        )
+        computed_location = target.location
+        computed_location = Location(computed_location + global_location_offset)
+        return Transform(computed_location, computed_rotation)
 
     should_exit = False
     while not should_exit:
         tick_start = time.time()
         _ = world.tick()
 
-        # Moving camera and spectator to the vehicle
-        # TODO: factor out this code into a function
+        # Moving camera, radar and spectator to the vehicle
+        # Attaching camera and radar to the vehicle caused carla to crash
         vehicle_transform = vehicle.get_transform()
-        camera_rotation = vehicle_transform.rotation
-        camera_rotation.pitch += CAMERA_PITCH
-
-        # Get local axis vectors
-        forward_vector = vehicle_transform.get_forward_vector()
-        right_vector = vehicle_transform.get_right_vector()
-        up_vector = vehicle_transform.get_up_vector()
-
-        # Apply the offset in the vehicle's local coordinate space
-        offset = (
-            forward_vector * CAMERA_LOCATION_OFFSET.x
-            + right_vector * CAMERA_LOCATION_OFFSET.y
-            + up_vector * CAMERA_LOCATION_OFFSET.z
+        camera_transform = move_to_with_local_offsets(
+            vehicle_transform,
+            CAMERA_LOCATION_OFFSET,
+            Rotation(pitch=CAMERA_PITCH),
         )
-        camera_location = vehicle_transform.location
-        camera_location = Location(camera_location + offset)
-        camera_transform = Transform(camera_location, camera_rotation)
         if camera is not None:
-            # Attaching the camera to vehicle caused carla to crash
             camera.set_transform(camera_transform)  # pyright: ignore[reportUnknownMemberType]
         spectator.set_transform(camera_transform)  # pyright: ignore[reportUnknownMemberType]
+        front_radar.set_transform(  # pyright: ignore[reportUnknownMemberType]
+            move_to_with_local_offsets(
+                vehicle_transform, radar_location, radar_rotation
+            )
+        )
+        world.debug.draw_string(front_radar.get_transform().location, "R")
 
-        world.debug.draw_string(destination, "Destination")
         compute_time = time.time() - tick_start
         should_exit = not state_machine.step(DT)
         if compute_time < DT:

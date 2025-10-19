@@ -8,6 +8,7 @@ from carla import (
     LaneType,
     Location,
     Map,
+    Sensor,
     TrafficManager,
     Transform,
     Vector3D,
@@ -30,6 +31,7 @@ from state_machine.sync_state_machine import (
     SyncStateMachine,
     Transition,
 )
+from pullover.checker import SafePulloverChecker
 from vehicle_logging_config import VehicleLoggingConfig
 
 
@@ -52,6 +54,7 @@ class VehicleParams:
     """
     Miminum speed at which the vehicle will move when pulling over
     """
+    radar_scan_width: float
 
     pull_over_potential_field_coeff: float = 1.1
     road_margin_repulsive_potential_field_coeff: float = 2
@@ -72,6 +75,7 @@ class VehicleParams:
         sensors_max_range: float,
         cruise_target_speed_kmh: float,
         max_pull_over_acceleration: float,
+        radar_scan_width: float,
     ):
         self.sensors_max_range = sensors_max_range
         if cruise_target_speed_kmh < 0:
@@ -80,6 +84,7 @@ class VehicleParams:
         if max_pull_over_acceleration >= 0:
             raise Exception("pull over acceleration must be negative")
         self.max_pull_over_acceleration = max_pull_over_acceleration
+        self.radar_scan_width = radar_scan_width
 
 
 class VehicleData:
@@ -125,6 +130,7 @@ class VehicleData:
     """
     Detector used to spot inattentive behaviours in the driver.
     """
+    obstacles_detector: SafePulloverChecker
 
     def __init__(
         self,
@@ -135,6 +141,7 @@ class VehicleData:
         traffic_manager: TrafficManager,
         params: VehicleParams,
         driver_camera_stream: CameraStream,
+        front_radar: Sensor,
         logging_config: VehicleLoggingConfig | None,
     ):
         if logging_config is None:
@@ -150,6 +157,15 @@ class VehicleData:
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
             driver_camera_stream, eye_threshold=0.15
+        )
+        offset = float(vehicle.bounding_box.extent.y)
+        self.obstacles_detector = SafePulloverChecker(
+            radar_sensor=front_radar,
+            vehicle=vehicle,
+            scanned_area_width=params.radar_scan_width,
+            scanned_area_x_offset=offset,
+            scanned_area_depth=params.sensors_max_range,
+            debug=True,
         )
 
 
@@ -179,6 +195,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
         traffic_manager: TrafficManager,
         params: VehicleParams,
         driver_camera_stream: CameraStream,
+        front_radar: Sensor,
         logging_config: VehicleLoggingConfig | None = None,
     ):
         super().__init__(
@@ -191,6 +208,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
                 traffic_manager=traffic_manager,
                 params=params,
                 driver_camera_stream=driver_camera_stream,
+                front_radar=front_radar,
                 logging_config=logging_config,
             ),
             logging_config=logging_config,
@@ -388,10 +406,10 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
     - Eventual obstacles in the emergency lane
     - Ability to stop the vehicle before any junction
     """
-    # TODO add check of obstacles
     max_stop_dist = _max_stopping_distance(data)
     return (
         max_stop_dist <= data.params.sensors_max_range
+        and data.obstacles_detector.is_pullover_safe(max_stop_dist)
         and _right_lane_is_shoulder(data)
         and (
             data.first_junction_distance is None
