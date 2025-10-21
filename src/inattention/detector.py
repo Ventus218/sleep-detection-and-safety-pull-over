@@ -108,7 +108,7 @@ class WebcamCameraStream(CameraStream):
 
     def __init__(
         self,
-        device: int = 0,
+        device: int | str,
         width: Optional[int] = None,
         height: Optional[int] = None,
         flip: bool = False,
