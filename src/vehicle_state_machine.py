@@ -156,7 +156,7 @@ class VehicleData:
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
-            driver_camera_stream, eye_threshold=0.15
+            driver_camera_stream, eye_threshold=0.32
         )
         offset = float(vehicle.bounding_box.extent.y)
         self.obstacles_detector = SafePulloverChecker(
