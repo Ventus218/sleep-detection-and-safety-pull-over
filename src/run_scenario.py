@@ -26,6 +26,8 @@ def choose_scenario(i: int | None) -> scenarios.Scenario:
         return scenarios.BusyStraightRoadScenario()
     elif i == 4:
         return scenarios.BusyCurveRoadScenario()
+    elif i == 5:
+        return scenarios.TrafficJamScenario()
     return scenarios.EmptyStraightRoadScenario()
 
 # Define scenario

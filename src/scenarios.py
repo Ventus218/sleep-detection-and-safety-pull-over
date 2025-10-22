@@ -200,3 +200,39 @@ class BusyCurveRoadScenario(EmptyCurveRoadScenario):
                 Rotation(pitch=-0.058719, yaw=-86.990295, roll=0.000142)
             ), 50),
         ]
+
+class TrafficJamScenario(EmptyStraightRoadScenario):
+    """
+    Scenario with a straight jammed road and some stopped cars in the emergency lane.
+    """
+    def __init__(self):
+        super().__init__()
+
+        p = MAP04_STRAIGHT_ROAD_SPAWN_POINT
+
+        self.moving_cars = [
+            ("vehicle.chevrolet.impala", Transform(
+                Location(p.location.x + 12, p.location.y, z=2),
+                p.rotation
+            ), 5),
+            ("vehicle.citroen.c3", Transform(
+                Location(p.location.x + 22, p.location.y, z=2),
+                p.rotation
+            ), 10),
+            ("vehicle.audi.etron", Transform(
+                Location(p.location.x + 32, p.location.y, z=2),
+                p.rotation
+            ), 5),
+            ("vehicle.jeep.wrangler_rubicon", Transform(
+                Location(p.location.x, p.location.y - 3, z=2),
+                p.rotation
+            ), 5),
+            ("vehicle.volkswagen.t2_2021", Transform(
+                Location(p.location.x + 12, p.location.y - 3, z=2),
+                p.rotation
+            ), 4.5),
+            ("vehicle.chevrolet.impala", Transform(
+                Location(p.location.x + 22, p.location.y - 3, z=2),
+                p.rotation
+            ), 4.5),
+        ]
