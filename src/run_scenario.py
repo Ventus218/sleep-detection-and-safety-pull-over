@@ -22,6 +22,10 @@ args = parser.parse_args()
 def choose_scenario(i: int | None) -> scenarios.Scenario:
     if i == 2:
         return scenarios.EmptyCurveRoadScenario()
+    elif i == 3:
+        return scenarios.BusyStraightRoadScenario()
+    elif i == 4:
+        return scenarios.BusyCurveRoadScenario()
     return scenarios.EmptyStraightRoadScenario()
 
 # Define scenario

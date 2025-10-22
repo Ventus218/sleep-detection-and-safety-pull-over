@@ -11,8 +11,8 @@ class Scenario():
     def __init__(self, 
                  map_name: str,
                  spawn_point: Transform,
-                 stopped_cars: list[tuple[str, Transform]], # [(blueprint_id, spawn_point)...]
-                 moving_cars: list[tuple[str, Transform, float | None]]): # [(blueprint_id, spawn_point, speed)...]
+                 stopped_cars: list[tuple[str, Transform]] = [], # [(blueprint_id, spawn_point)...]
+                 moving_cars: list[tuple[str, Transform, float | None]] = []): # [(blueprint_id, spawn_point, speed)...]
         self.map_name     = map_name
         self.spawn_point  = spawn_point
         self.stopped_cars = stopped_cars
@@ -72,10 +72,13 @@ MAP04_CURVE_ROAD_SPAWN_POINT = Transform(
 )
 
 class EmptyStraightRoadScenario(Scenario):
+    """
+    Scenario with an empty straight road and some stopped cars in the emergency lane.
+    """
     def __init__(self):
-        p = MAP04_STRAIGHT_ROAD_SPAWN_POINT
-
-        self.obstacles = [
+        super().__init__(map_name="Town04", spawn_point=MAP04_STRAIGHT_ROAD_SPAWN_POINT)
+        p = self.spawn_point
+        self.stopped_cars = [
             ("vehicle.chevrolet.impala", Transform(
                 Location(p.location.x + 50, p.location.y + 3, p.location.z + 1),
                 p.rotation
@@ -110,18 +113,14 @@ class EmptyStraightRoadScenario(Scenario):
             )),
         ]
 
-        super().__init__(
-            map_name="Town04",
-            spawn_point=MAP04_STRAIGHT_ROAD_SPAWN_POINT,
-            stopped_cars=self.obstacles,
-            moving_cars=[]
-            )
-
 class EmptyCurveRoadScenario(Scenario):
+    """
+    Scenario with an empty curved road and some stopped cars in the emergency lane.
+    """
     def __init__(self):
-        p = MAP04_CURVE_ROAD_SPAWN_POINT
+        super().__init__(map_name="Town04", spawn_point=MAP04_CURVE_ROAD_SPAWN_POINT)
 
-        self.obstacles = [
+        self.stopped_cars = [
             ("vehicle.chevrolet.impala", Transform(
                 Location(x=415.110840, y=-257.378632, z=1),
                 Rotation(pitch=3.933704, yaw=-97.159393, roll=0.000142)
@@ -147,10 +146,57 @@ class EmptyCurveRoadScenario(Scenario):
                 Rotation(pitch=0.520057, yaw=-143.702698, roll=0.000022)
             )),
         ]
+        
+class BusyStraightRoadScenario(EmptyStraightRoadScenario):
+    """
+    Scenario with a straight road with traffic and some stopped cars in the emergency lane.
+    """
+    def __init__(self):
+        super().__init__()
 
-        super().__init__(
-            map_name="Town04",
-            spawn_point=MAP04_CURVE_ROAD_SPAWN_POINT,
-            stopped_cars=self.obstacles,
-            moving_cars=[]
-            )
+        p = MAP04_STRAIGHT_ROAD_SPAWN_POINT
+
+        self.moving_cars = [
+            ("vehicle.chevrolet.impala", Transform(
+                Location(x=-329.602448, y=33.682590, z=1.635707),
+                p.rotation
+            ), None),
+            ("vehicle.citroen.c3", Transform(
+                Location(x=-310.013245, y=37.275883, z=1.992048),
+                p.rotation
+            ), 70),
+            ("vehicle.audi.etron", Transform(
+                Location(x=-320.013245, y=37.275883, z=1.992048),
+                p.rotation
+            ), 25),
+            ("vehicle.jeep.wrangler_rubicon", Transform(
+                Location(x=-363.131042, y=37.079632, z=1.659683),
+                p.rotation
+            ), 50),
+        ]
+
+class BusyCurveRoadScenario(EmptyCurveRoadScenario):
+    """
+    Scenario with a curved road with traffic and some stopped cars in the emergency lane.
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.moving_cars = [
+            ("vehicle.chevrolet.impala", Transform(
+                Location(x=410.391357, y=-179.754700, z=0.597406),
+                Rotation(pitch=-0.706938, yaw=-89.009186, roll=0.000139)
+            ), None),
+            ("vehicle.citroen.c3", Transform(
+                Location(x=413.957489, y=-192.886047, z=0.722103),
+                Rotation(pitch=7.288692, yaw=-88.923775, roll=0.000118)
+            ), 70),
+            ("vehicle.audi.etron", Transform(
+                Location(x=413.988037, y=-211.916397, z=0.450147),
+                Rotation(pitch=0.129835, yaw=-87.247612, roll=0.000091)
+            ), 25),
+            ("vehicle.jeep.wrangler_rubicon", Transform(
+                Location(x=412.690002, y=-71.731537, z=1.184738),
+                Rotation(pitch=-0.058719, yaw=-86.990295, roll=0.000142)
+            ), 50),
+        ]
