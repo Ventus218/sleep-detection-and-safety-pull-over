@@ -583,7 +583,14 @@ class PullingOverS(VehicleState):
         # a bit ahead of the vehicle
         vehicle_front = _vehicle_front(data)
         vehicle_front = Location(
-            vehicle_front + data.vehicle.get_transform().get_forward_vector() * 4
+            vehicle_front + data.vehicle.get_transform().get_forward_vector() * 2
+        )
+        # Since it is of maximum importance not to exceed the emergency lane margin
+        # the fields are evaluated on the "front right corner" of the vehicle
+        vehicle_front = Location(
+            vehicle_front
+            + data.vehicle.get_transform().get_right_vector()
+            * data.vehicle.bounding_box.extent.y
         )
         lane_w = cast(
             Waypoint, data.map.get_waypoint(vehicle_front, lane_type=LaneType.Shoulder)
