@@ -116,7 +116,7 @@ There are three main parameters which then allow to compute most of the threshol
 Knowing the sensors maximum range and the maximum deceleration we can compute the maximum speed the vehicle can keep while searching for a safe pull over spot.
 So the vehicle will not start pulling over if the speed is higher than the computed value.
 
-While the vehicle is searching for a pull over spot it will check if there are any obstacles or entries/exits in the emergency lane and if so compute their distance.
+While the vehicle is searching for a pull over spot it will check if there are any obstacles or entries/exits in the emergency lane and if so compute their distance. (We take the minimum between the computed distance and a fixed distance, for example 10 meters, to take into account the fact that the vehicle may immediately reach the minimum pull over speed and because of that stop further than expected)
 Knowing the current speed and the distance from the next obstacle or entry/exit it is possible to compute what is the deceleration needed to stop before that.
 
 If the computed deceleration is higher than what allowed (by the other primary parameter) then the vehicle will not consider this pull over spot as suitable.
