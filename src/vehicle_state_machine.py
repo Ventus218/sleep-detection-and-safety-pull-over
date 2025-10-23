@@ -50,9 +50,14 @@ class VehicleParams:
     Target braking acceleration for the vehicle while pulling over.
     Must be < 0.
     """
-    min_pull_over_speed: float = 5
+    min_pull_over_speed_kmh: float = 5
     """
     Miminum speed at which the vehicle will move when pulling over
+    """
+    min_pull_over_space: float = 10
+    """
+    Even if the vehicle is going really slow this is the minimum amount of space
+    needed for a 100% safe pull over.
     """
     radar_scan_width: float
 
@@ -411,6 +416,7 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
     - Ability to stop the vehicle before any junction
     """
     max_stop_dist = _max_stopping_distance(data)
+    max_stop_dist = max(max_stop_dist, data.params.min_pull_over_space)
     return (
         max_stop_dist <= data.params.sensors_max_range
         and data.obstacles_detector.is_pullover_safe(max_stop_dist)
@@ -494,9 +500,13 @@ def _first_junction_detected_distance(data: VehicleData) -> float | None:
 
 
 def _max_stopping_distance(data: VehicleData) -> float:
-    return (data.speed.length() ** 2) / (
-        2 * abs(data.params.max_pull_over_acceleration)
-    )
+    """
+    Computes the stopping distance considering the maximum pull over deceleration
+    and taking as current speed the maximum between the actual current speed
+    and the minimum pull over speed
+    """
+    speed = max(data.speed.length(), data.params.min_pull_over_speed_kmh / 3.6)
+    return (speed**2) / (2 * abs(data.params.max_pull_over_acceleration))
 
 
 class PullOverPreparationS(VehicleState):
@@ -711,7 +721,7 @@ class EmergencyLaneNotReachedS(VehicleState):
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
-        _keep_target_speed(data, data.params.min_pull_over_speed)
+        _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -733,7 +743,7 @@ class EmergencyLaneReachedS(VehicleState):
             )
             < 0.999
         ):
-            _keep_target_speed(data, data.params.min_pull_over_speed)
+            _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
         else:
             _keep_target_speed(data, 0)
 
