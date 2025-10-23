@@ -22,7 +22,7 @@ class SafePulloverChecker:
         vehicle: carla.Vehicle,
         scanned_area_width: float, # in meters: width to check
         scanned_area_x_offset: float, # in meters
-        min_inliers: int = 2,
+        min_inliers: int = 1,
         scanned_area_depth: float = 50, # in meters: distance to check
         safety_delay: float = 0.8, # in seconds: time that should pass before stating its safe
         debug: bool = False,
