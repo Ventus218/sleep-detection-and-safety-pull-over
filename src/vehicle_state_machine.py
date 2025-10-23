@@ -174,6 +174,14 @@ class VehicleData:
         )
 
 
+class PullOverSafety(StrEnum):
+    SAFE = "SAFE"
+    GOING_TOO_FAST = "GOING TOO FAST"
+    OBSTACLE_DETECTED = "OBSTACLE DETECTED"
+    JUNCTION_DETECTED = "JUNCTION DETECTED"
+    MISSING_EM_LANE = "NO EMERGENCY LANE ON THE RIGHT"
+
+
 class VehicleTimers(StrEnum):
     INATTENTION = auto()
 
@@ -372,9 +380,9 @@ class LaneKeepingS(VehicleState):
         # so we need to apply a vehicle control with some field set to a meaningless value
         data.vehicle.apply_control(VehicleControl(throttle=0.01))
 
+
 def _inattention_detected(data: VehicleData) -> bool:
     return data.inattention_detector.detect()
-
 
 class NoInattentionDetectedS(VehicleState):
     @override
@@ -409,7 +417,7 @@ class InattentionDetectedS(VehicleState):
         ctx.timer(VehicleTimers.INATTENTION).reset(20)
 
 
-def _pull_over_is_safe(data: VehicleData) -> bool:
+def _pull_over_is_safe(data: VehicleData) -> PullOverSafety:
     """
     Computes whether pulling over is safe by taking into account:
     - Eventual obstacles in the emergency lane
@@ -417,15 +425,19 @@ def _pull_over_is_safe(data: VehicleData) -> bool:
     """
     max_stop_dist = _max_stopping_distance(data)
     max_stop_dist = max(max_stop_dist, data.params.min_pull_over_space)
-    return (
-        max_stop_dist <= data.params.sensors_max_range
-        and data.obstacles_detector.is_pullover_safe(max_stop_dist)
-        and _right_lane_is_shoulder(data)
-        and (
-            data.first_junction_distance is None
-            or data.first_junction_distance > max_stop_dist
-        )
-    )
+    if max_stop_dist > data.params.sensors_max_range:
+        return PullOverSafety.GOING_TOO_FAST
+    if not data.obstacles_detector.is_pullover_safe(max_stop_dist):
+        return PullOverSafety.OBSTACLE_DETECTED
+    if not _right_lane_is_shoulder(data):
+        return PullOverSafety.MISSING_EM_LANE
+    if (
+        data.first_junction_distance is not None
+        and data.first_junction_distance <= max_stop_dist
+    ):
+        return PullOverSafety.JUNCTION_DETECTED
+    return PullOverSafety.SAFE
+
 
 def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.transform.get_forward_vector().dot(w2.transform.get_forward_vector()) > 0
@@ -434,11 +446,13 @@ def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
 def _waypoints_same_road(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.road_id == w2.road_id
 
+
 def _right_lane_is_shoulder(data: VehicleData) -> bool:
     right_lane = _curr_waypoint(data).get_right_lane()
     return right_lane is not None and right_lane.lane_type == LaneType.Shoulder
 
-def _curr_waypoint(data:VehicleData) -> Waypoint:
+
+def _curr_waypoint(data: VehicleData) -> Waypoint:
     # We use the target waypoint as getting a waypoint under the vehicle position
     # may return a waypoint that is part of another overlapping lane
     target_waypoint = data.traffic_manager.get_next_action(data.vehicle)[1]
@@ -454,6 +468,7 @@ def _curr_waypoint(data:VehicleData) -> Waypoint:
         ),
         target_waypoint,  # Just to not crash if for some reason preconditions are not met
     )
+
 
 def _first_junction_detected_distance(data: VehicleData) -> float | None:
     curr_waypoint = _curr_waypoint(data)
@@ -515,7 +530,8 @@ class PullOverPreparationS(VehicleState):
         return [
             VehicleTransition(
                 to=PullingOverS(),
-                condition=lambda data, ctx: _pull_over_is_safe(data),
+                condition=lambda data, ctx: _pull_over_is_safe(data)
+                == PullOverSafety.SAFE,
             )
         ]
 
@@ -534,9 +550,11 @@ class PullOverPreparationS(VehicleState):
     def actions(self) -> list[VehicleStateAction]:
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: not _pull_over_is_safe(data),
+                condition=lambda data, ctx: _pull_over_is_safe(data)
+                != PullOverSafety.SAFE,
                 action=lambda data, ctx: data.world.debug.draw_string(
-                    data.vehicle.get_location() + Location(z=2), "PULL OVER NOT SAFE"
+                    data.vehicle.get_location() + Location(z=2),
+                    _pull_over_is_safe(data).__str__(),
                 ),
             )
         ]
