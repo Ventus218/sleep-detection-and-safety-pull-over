@@ -741,5 +741,6 @@ class StoppedS(VehicleState):
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle_control.hand_brake = True
+        data.vehicle_control.gear = 0
         # TODO: activate emergency signals
         ...
