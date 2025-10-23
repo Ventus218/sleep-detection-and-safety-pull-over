@@ -57,16 +57,7 @@ class SafePulloverChecker:
     # Main decision
     # ------------------------------
 
-    def _is_pullover_safe_no_delay(self, depth: float = -1) -> bool:
-        """
-        Return True if pullover is considered safe, False otherwise.
-        
-        Parameters
-        ----------
-        depth: float
-            The distance to cover during the scan. If it's a negative number, then uses the default value of the checker.
-            By default `depth` is -1.
-        """
+    def _is_pullover_safe_no_delay(self, depth: float = -1, rotation: float = 0) -> bool:
         if depth < 0:
             depth = self.scanned_area_depth
 
@@ -105,8 +96,21 @@ class SafePulloverChecker:
         self._debug("Obstacles detected.")
         return False
 
-    def is_pullover_safe(self, depth: float = -1) -> bool:
-        is_safe = self._is_pullover_safe_no_delay(depth)
+    def is_pullover_safe(self, depth: float = -1, rotation: float = 0) -> bool:
+        """
+        Return True if pullover is considered safe, False otherwise.
+        
+        Parameters
+        ----------
+        depth: float
+            The distance to cover during the scan. If it's a negative number, then uses the default value of the checker.
+            By default `depth` is -1.
+        rotation: float
+            The alignment in degrees of the scan. 0 means it goes stright ahead, any other value rotates the area around the
+            top-right corner of the vehicle.
+            By default `rotation` is 0.
+        """
+        is_safe = self._is_pullover_safe_no_delay(depth, rotation)
 
         if not is_safe:
             # when not safe, reset timer for safety
