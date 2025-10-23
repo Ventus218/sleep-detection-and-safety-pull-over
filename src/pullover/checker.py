@@ -66,9 +66,13 @@ class SafePulloverChecker:
 
         # compute relative positions
         vehicle_tr = self.vehicle.get_transform()
+        rotated_tr = carla.Transform(
+            vehicle_tr.location,
+            carla.Rotation(pitch=vehicle_tr.rotation.pitch, roll=vehicle_tr.rotation.roll, yaw=vehicle_tr.rotation.yaw + rotation)
+        )
         for i in range(pts.shape[0]):
             vec = carla.Vector3D(float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2]))
-            vehicle_tr.inverse_transform(vec)
+            rotated_tr.inverse_transform(vec)
             pts[i, 0] = vec.x 
             pts[i, 1] = vec.y
             pts[i, 2] = vec.z
@@ -83,7 +87,7 @@ class SafePulloverChecker:
         if self.debug:
             for i in range(pts.shape[0]):
                 self.radar_sensor.get_world().debug.draw_point(
-                    vehicle_tr.transform(carla.Vector3D(float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2]))),
+                    rotated_tr.transform(carla.Vector3D(float(pts[i, 0]), float(pts[i, 1]), float(pts[i, 2]))),
                     size=0.075,
                     life_time=0.06,
                     persistent_lines=False,
