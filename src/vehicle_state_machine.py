@@ -50,13 +50,18 @@ class VehicleParams:
     Target braking acceleration for the vehicle while pulling over.
     Must be < 0.
     """
-    min_pull_over_speed: float = 5
+    min_pull_over_speed_kmh: float = 5
     """
     Miminum speed at which the vehicle will move when pulling over
     """
+    min_pull_over_space: float = 10
+    """
+    Even if the vehicle is going really slow this is the minimum amount of space
+    needed for a 100% safe pull over.
+    """
     radar_scan_width: float
 
-    pull_over_potential_field_coeff: float = 1.1
+    pull_over_potential_field_coeff: float = 1.35
     road_margin_repulsive_potential_field_coeff: float = 2
 
     @property
@@ -167,6 +172,14 @@ class VehicleData:
             scanned_area_depth=params.sensors_max_range,
             debug=True,
         )
+
+
+class PullOverSafety(StrEnum):
+    SAFE = "SAFE"
+    GOING_TOO_FAST = "GOING TOO FAST"
+    OBSTACLE_DETECTED = "OBSTACLE DETECTED"
+    JUNCTION_DETECTED = "JUNCTION DETECTED"
+    MISSING_EM_LANE = "NO EMERGENCY LANE ON THE RIGHT"
 
 
 class VehicleTimers(StrEnum):
@@ -356,16 +369,20 @@ class LaneKeepingS(VehicleState):
         data.traffic_manager.set_desired_speed(
             data.vehicle, data.params.cruise_target_speed_kmh
         )
-        data.traffic_manager.vehicle_percentage_speed_difference(data.vehicle, -100)  # pyright: ignore[reportUnknownMemberType]
+        data.traffic_manager.vehicle_percentage_speed_difference(data.vehicle, 0)  # pyright: ignore[reportUnknownMemberType]
         data.vehicle.set_autopilot(True, data.traffic_manager.get_port())
 
     @override
     def on_exit(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle.set_autopilot(False, data.traffic_manager.get_port())
+        # The following line fixes a carla bug https://github.com/carla-simulator/carla/issues/7626
+        # It appears that applying an empty VehicleControl will not do anything and
+        # so we need to apply a vehicle control with some field set to a meaningless value
+        data.vehicle.apply_control(VehicleControl(throttle=0.01))
+
 
 def _inattention_detected(data: VehicleData) -> bool:
     return data.inattention_detector.detect()
-
 
 class NoInattentionDetectedS(VehicleState):
     @override
@@ -400,22 +417,27 @@ class InattentionDetectedS(VehicleState):
         ctx.timer(VehicleTimers.INATTENTION).reset(20)
 
 
-def _pull_over_is_safe(data: VehicleData) -> bool:
+def _pull_over_is_safe(data: VehicleData) -> PullOverSafety:
     """
     Computes whether pulling over is safe by taking into account:
     - Eventual obstacles in the emergency lane
     - Ability to stop the vehicle before any junction
     """
     max_stop_dist = _max_stopping_distance(data)
-    return (
-        max_stop_dist <= data.params.sensors_max_range
-        and data.obstacles_detector.is_pullover_safe(max_stop_dist)
-        and _right_lane_is_shoulder(data)
-        and (
-            data.first_junction_distance is None
-            or data.first_junction_distance > max_stop_dist
-        )
-    )
+    max_stop_dist = max(max_stop_dist, data.params.min_pull_over_space)
+    if max_stop_dist > data.params.sensors_max_range:
+        return PullOverSafety.GOING_TOO_FAST
+    if not data.obstacles_detector.is_pullover_safe(max_stop_dist):
+        return PullOverSafety.OBSTACLE_DETECTED
+    if not _right_lane_is_shoulder(data):
+        return PullOverSafety.MISSING_EM_LANE
+    if (
+        data.first_junction_distance is not None
+        and data.first_junction_distance <= max_stop_dist
+    ):
+        return PullOverSafety.JUNCTION_DETECTED
+    return PullOverSafety.SAFE
+
 
 def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.transform.get_forward_vector().dot(w2.transform.get_forward_vector()) > 0
@@ -424,11 +446,13 @@ def _waypoints_roughly_same_direction(w1: Waypoint, w2: Waypoint) -> bool:
 def _waypoints_same_road(w1: Waypoint, w2: Waypoint) -> bool:
     return w1.road_id == w2.road_id
 
+
 def _right_lane_is_shoulder(data: VehicleData) -> bool:
     right_lane = _curr_waypoint(data).get_right_lane()
     return right_lane is not None and right_lane.lane_type == LaneType.Shoulder
 
-def _curr_waypoint(data:VehicleData) -> Waypoint:
+
+def _curr_waypoint(data: VehicleData) -> Waypoint:
     # We use the target waypoint as getting a waypoint under the vehicle position
     # may return a waypoint that is part of another overlapping lane
     target_waypoint = data.traffic_manager.get_next_action(data.vehicle)[1]
@@ -441,8 +465,10 @@ def _curr_waypoint(data:VehicleData) -> Waypoint:
         filter(
             lambda w: w.lane_id == target_waypoint.lane_id,
             target_waypoint.previous(distance_from_car),
-        )
+        ),
+        target_waypoint,  # Just to not crash if for some reason preconditions are not met
     )
+
 
 def _first_junction_detected_distance(data: VehicleData) -> float | None:
     curr_waypoint = _curr_waypoint(data)
@@ -485,13 +511,17 @@ def _first_junction_detected_distance(data: VehicleData) -> float | None:
             # we assume there is an actual junction on the vehicle side of the road
             if waypoint_in_different_road is not None:
                 return meters_ahead
-        return None
+    return None
 
 
 def _max_stopping_distance(data: VehicleData) -> float:
-    return (data.speed.length() ** 2) / (
-        2 * abs(data.params.max_pull_over_acceleration)
-    )
+    """
+    Computes the stopping distance considering the maximum pull over deceleration
+    and taking as current speed the maximum between the actual current speed
+    and the minimum pull over speed
+    """
+    speed = max(data.speed.length(), data.params.min_pull_over_speed_kmh / 3.6)
+    return (speed**2) / (2 * abs(data.params.max_pull_over_acceleration))
 
 
 class PullOverPreparationS(VehicleState):
@@ -500,7 +530,8 @@ class PullOverPreparationS(VehicleState):
         return [
             VehicleTransition(
                 to=PullingOverS(),
-                condition=lambda data, ctx: _pull_over_is_safe(data),
+                condition=lambda data, ctx: _pull_over_is_safe(data)
+                == PullOverSafety.SAFE,
             )
         ]
 
@@ -519,9 +550,11 @@ class PullOverPreparationS(VehicleState):
     def actions(self) -> list[VehicleStateAction]:
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: not _pull_over_is_safe(data),
+                condition=lambda data, ctx: _pull_over_is_safe(data)
+                != PullOverSafety.SAFE,
                 action=lambda data, ctx: data.world.debug.draw_string(
-                    data.vehicle.get_location() + Location(z=2), "PULL OVER NOT SAFE"
+                    data.vehicle.get_location() + Location(z=2),
+                    _pull_over_is_safe(data).__str__(),
                 ),
             )
         ]
@@ -583,7 +616,14 @@ class PullingOverS(VehicleState):
         # a bit ahead of the vehicle
         vehicle_front = _vehicle_front(data)
         vehicle_front = Location(
-            vehicle_front + data.vehicle.get_transform().get_forward_vector() * 4
+            vehicle_front + data.vehicle.get_transform().get_forward_vector() * 2
+        )
+        # Since it is of maximum importance not to exceed the emergency lane margin
+        # the fields are evaluated on the "front right corner" of the vehicle
+        vehicle_front = Location(
+            vehicle_front
+            + data.vehicle.get_transform().get_right_vector()
+            * data.vehicle.bounding_box.extent.y
         )
         lane_w = cast(
             Waypoint, data.map.get_waypoint(vehicle_front, lane_type=LaneType.Shoulder)
@@ -699,7 +739,7 @@ class EmergencyLaneNotReachedS(VehicleState):
 
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
-        _keep_target_speed(data, data.params.min_pull_over_speed)
+        _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
 
 
 class EmergencyLaneReachedS(VehicleState):
@@ -721,7 +761,7 @@ class EmergencyLaneReachedS(VehicleState):
             )
             < 0.999
         ):
-            _keep_target_speed(data, data.params.min_pull_over_speed)
+            _keep_target_speed(data, data.params.min_pull_over_speed_kmh)
         else:
             _keep_target_speed(data, 0)
 
@@ -733,5 +773,6 @@ class StoppedS(VehicleState):
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle_control.hand_brake = True
+        data.vehicle_control.gear = 0
         # TODO: activate emergency signals
         ...
