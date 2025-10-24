@@ -97,6 +97,7 @@ class VehicleData:
     logging_config: VehicleLoggingConfig
     world: World
     map: Map
+    topology: list[tuple[Waypoint, Waypoint]]
     traffic_manager: TrafficManager
     params: VehicleParams
 
@@ -157,6 +158,7 @@ class VehicleData:
         self.params = params
         self.world = world
         self.map = map
+        self.topology = map.get_topology()
         self.traffic_manager = traffic_manager
         self.vehicle = vehicle
         self.pygame_io = pygame_io
@@ -308,7 +310,9 @@ class ManualDrivingS(VehicleState):
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle_control = data.manual_control.vehicle_control
-        _first_junction_detected_distance(data)
+        # TODO: remove
+        if _first_junction_detected_distance(data) != None:
+            data.world.debug.draw_string(data.vehicle.get_location(), "J", life_time=-1)
 
     @override
     def transitions(self) -> list[VehicleTransition]:
@@ -478,18 +482,29 @@ def _curr_waypoint(data: VehicleData) -> Waypoint:
         # In case there is no next action whe use the current location waypoint
         return data.map.get_waypoint(data.vehicle.get_location())
 
-def _first_junction_detected_distance(data: VehicleData) -> float | None:
-    # Here we compute a waypoint every meter ahead of the vehicle to check if it is part of a junction
-    waypoints = [_curr_waypoint(data)]
-    while waypoints.__len__() < data.params.sensors_max_range:
-        last_w = waypoints[waypoints.__len__() - 1]
-        # TODO: the same waypoint gets added, increase search distance
-        next_l = last_w.transform.location + last_w.transform.get_forward_vector() * 2
-        waypoints.append(data.map.get_waypoint(Location(next_l)))
 
+def _first_junction_detected_distance(data: VehicleData) -> float | None:
+    # Here we compute a waypoint every meter ahead of the vehicle to later check if it is part of a junction
+    waypoints = [_curr_waypoint(data)]
+    # +1 because curr_waypoint is counted
+    sensors_range = int(data.params.sensors_max_range) + 1
+    while waypoints.__len__() < sensors_range:
+        last_w = waypoints[waypoints.__len__() - 1]
+        waypoints.extend(last_w.next_until_lane_end(1))
+        last_w = waypoints[waypoints.__len__() - 1]
+        first_of_next_section = next(
+            filter(
+                lambda tuple: last_w.road_id == tuple[0].road_id
+                and last_w.section_id == tuple[0].section_id
+                and tuple[1].lane_id == last_w.lane_id,
+                data.topology,
+            )
+        )
+        waypoints[waypoints.__len__() - 1] = first_of_next_section[1]
+    waypoints = waypoints[:sensors_range]
+
+    # TODO: fix some non-junctions recognized
     for distance, w in enumerate(waypoints):
-        # TODO: remove
-        data.world.debug.draw_string(w.transform.location, "O", life_time=-1)
         # Junctions are road segments and as such they include both sides, so checking if
         # the waypoint is part of a junction is not enough because we don't care if the
         # actual exit or entry is on the other side of the road
