@@ -463,11 +463,9 @@ class Timer:
         """
         Resets the timer to time_set or, if None is provided, to the previous time set
         """
-        match time_set:
-            case None:
-                self._time_left = self._time_set
-            case time_set:
-                self._time_left = time_set
+        if time_set is not None:
+            self._time_set = time_set
+        self._time_left = self._time_set
 
     def step(self, dt: float):
         """
