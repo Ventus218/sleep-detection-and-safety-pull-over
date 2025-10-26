@@ -310,9 +310,6 @@ class ManualDrivingS(VehicleState):
     @override
     def on_do(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle_control = data.manual_control.vehicle_control
-        # TODO: remove
-        if _first_junction_detected_distance(data) != None:
-            data.world.debug.draw_string(data.vehicle.get_location(), "J", life_time=-1)
 
     @override
     def transitions(self) -> list[VehicleTransition]:
@@ -503,14 +500,19 @@ def _first_junction_detected_distance(data: VehicleData) -> float | None:
             filter(
                 lambda tuple: last_w.road_id == tuple[0].road_id
                 and last_w.section_id == tuple[0].section_id
-                and tuple[1].lane_id == last_w.lane_id,
+                and last_w.lane_id == tuple[1].lane_id,
                 data.topology,
-            )
+            ),
+            None,
         )
+        if first_of_next_section is None:
+            # Some roads intersections are connected in strange ways and i was unable
+            # to reliably find the correct lane continuation, in which case we assume
+            # there may be a junction (for safety reasons)
+            return 0
         waypoints[waypoints.__len__() - 1] = first_of_next_section[1]
-    waypoints = waypoints[:sensors_range]
 
-    # TODO: fix some non-junctions recognized
+    waypoints = waypoints[:sensors_range]
     for distance, w in enumerate(waypoints):
         # Junctions are road segments and as such they include both sides, so checking if
         # the waypoint is part of a junction is not enough because we don't care if the
@@ -520,7 +522,8 @@ def _first_junction_detected_distance(data: VehicleData) -> float | None:
 
             # Here we take just those waypoints that point to the same direction as the vehicle
             junction_waypoints = filter(
-                lambda t: _waypoints_roughly_same_direction(t[0], w),
+                lambda t: _waypoints_roughly_same_direction(t[0], w)
+                and _waypoints_roughly_same_direction(t[1], w),
                 junction_waypoints,
             )
 
