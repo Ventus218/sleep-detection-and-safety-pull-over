@@ -438,7 +438,7 @@ def _pull_over_is_safe(data: VehicleData) -> PullOverSafety:
     max_stop_dist = _max_stopping_distance(data)
     max_stop_dist = max(max_stop_dist, data.params.min_pull_over_space)
     scan_width = (
-        data.vehicle.bounding_box.extent.y * 2 * 1.4
+        data.vehicle.bounding_box.extent.y * 2 * 1.7
         - _signed_lateral_distance(
             data.vehicle.get_location(), _curr_waypoint(data).transform
         )
