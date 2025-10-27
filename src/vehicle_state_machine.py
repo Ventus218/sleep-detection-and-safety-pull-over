@@ -165,7 +165,7 @@ class VehicleData:
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
-            driver_camera_stream, eye_threshold=0.32
+            driver_camera_stream, eye_threshold=0.20
         )
         offset = float(vehicle.bounding_box.extent.y)
         self.obstacles_detector = SafePulloverChecker(
@@ -186,6 +186,7 @@ class PullOverSafety(StrEnum):
 
 class VehicleTimers(StrEnum):
     INATTENTION = auto()
+    INATTENTION_TOLERANCE = auto()
 
 
 type VehicleContext = Context[VehicleTimers]
@@ -402,9 +403,26 @@ class NoInattentionDetectedS(VehicleState):
         return [
             VehicleTransition(
                 to=InattentionDetectedS(),
-                condition=lambda data, ctx: _inattention_detected(data),
+                condition=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_TOLERANCE
+                ).is_elapsed(),
             )
         ]
+
+    @override
+    def actions(self) -> list[VehicleStateAction]:
+        return [
+            VehicleStateAction(
+                condition=lambda data, ctx: not _inattention_detected(data),
+                action=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_TOLERANCE
+                ).reset(),
+            ),
+        ]
+
+    @override
+    def on_entry(self, data: VehicleData, ctx: VehicleContext):
+        ctx.timer(VehicleTimers.INATTENTION_TOLERANCE).reset(2)
 
 
 class InattentionDetectedS(VehicleState):
@@ -413,7 +431,9 @@ class InattentionDetectedS(VehicleState):
         return [
             VehicleTransition(
                 to=NoInattentionDetectedS(),
-                condition=lambda data, ctx: not _inattention_detected(data),
+                condition=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_TOLERANCE
+                ).is_elapsed(),
             ),
             VehicleTransition(
                 to=PullOverPreparationS(),
@@ -424,9 +444,20 @@ class InattentionDetectedS(VehicleState):
         ]
 
     @override
+    def actions(self) -> list[VehicleStateAction]:
+        return [
+            VehicleStateAction(
+                condition=lambda data, ctx: _inattention_detected(data),
+                action=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_TOLERANCE
+                ).reset(),
+            ),
+        ]
+
+    @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        # TODO: choose proper amount of seconds
-        ctx.timer(VehicleTimers.INATTENTION).reset(20)
+        ctx.timer(VehicleTimers.INATTENTION).reset(18)
+        ctx.timer(VehicleTimers.INATTENTION_TOLERANCE).reset()
 
 
 def _pull_over_is_safe(data: VehicleData) -> PullOverSafety:

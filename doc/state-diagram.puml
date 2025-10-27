@@ -13,14 +13,14 @@ state "Advanced Cruise Control" as CruiseControl {
         [*] -> NoInattentionDetected
 
         state "No Inattention Detected" as NoInattentionDetected
-        NoInattentionDetected -> InattentionDetected : inattention detected
+        NoInattentionDetected -> InattentionDetected : inattention detected for 2 seconds
 
         state "Inattention Detected" as InattentionDetected {
-            InattentionDetected : after 10 seconds / activate sound noise
+            InattentionDetected : after 8 seconds / activate sound noise
             InattentionDetected : exit / deactivate sound noise
         }
-        InattentionDetected -> NoInattentionDetected : no inattention detected
-        InattentionDetected -r-> PullOverPrep : after 20 seconds
+        InattentionDetected -> NoInattentionDetected : no inattention detected for 2 seconds
+        InattentionDetected -r-> PullOverPrep : after 18 seconds
 
         state "Pull Over Preparation" as PullOverPrep {
             PullOverPrep : entry / activate turn signals
