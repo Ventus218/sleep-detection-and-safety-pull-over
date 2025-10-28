@@ -157,6 +157,7 @@ class VehicleData:
     manual_control: PygameVehicleControl
     dashboard_buttons: PygameDashboardButtons = PygameDashboardButtons()
     pygame_events: list[pygame.event.Event] = []
+    wake_up_sound: pygame.mixer.Sound | None = None
 
     inattention_detector: InattentionDetector
     """
@@ -174,6 +175,7 @@ class VehicleData:
         params: VehicleParams,
         driver_camera_stream: CameraStream,
         front_radar: Sensor,
+        wake_up_sound: pygame.mixer.Sound | None,
         logging_config: VehicleLoggingConfig | None,
     ):
         if logging_config is None:
@@ -199,6 +201,7 @@ class VehicleData:
             scanned_area_x_offset=offset,
             debug=True,
         )
+        self.wake_up_sound = wake_up_sound
 
 
 class PullOverSafety(StrEnum):
@@ -237,6 +240,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
         params: VehicleParams,
         driver_camera_stream: CameraStream,
         front_radar: Sensor,
+        wake_up_sound: pygame.mixer.Sound | None = None,
         logging_config: VehicleLoggingConfig | None = None,
     ):
         super().__init__(
@@ -250,6 +254,7 @@ class VehicleStateMachine(SyncStateMachine[VehicleData, VehicleTimers]):
                 params=params,
                 driver_camera_stream=driver_camera_stream,
                 front_radar=front_radar,
+                wake_up_sound=wake_up_sound,
                 logging_config=logging_config,
             ),
             logging_config=logging_config,
@@ -285,6 +290,10 @@ class WrapperS(State[VehicleData, VehicleTimers]):
     @override
     def children(self) -> list[VehicleState]:
         return [ManualDrivingS(), CruiseControlS(), ExitS()]
+
+    @override
+    def on_entry(self, data: VehicleData, ctx: VehicleContext):
+        pygame.mixer.init()
 
     @override
     def on_early_do(self, data: VehicleData, ctx: VehicleContext):
@@ -376,6 +385,11 @@ class CruiseControlS(VehicleState):
                 ctx: data.dashboard_buttons.manual_control_button_pressed,
             )
         ]
+
+    @override
+    def on_exit(self, data: VehicleData, ctx: VehicleContext):
+        if data.wake_up_sound is not None:
+            data.wake_up_sound.stop()
 
 
 # ========== LANE_KEEPING ==========
@@ -479,6 +493,9 @@ class InattentionDetectedS(VehicleState):
                     VehicleTimers.INATTENTION_CHECK
                 ).is_elapsed()
                 and not _inattention_detected(data),
+                action=lambda data, ctx: data.wake_up_sound.stop()
+                if data.wake_up_sound is not None
+                else None,
             ),
             VehicleTransition(
                 to=PullOverPreparationS(),
@@ -501,6 +518,8 @@ class InattentionDetectedS(VehicleState):
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
+        if data.wake_up_sound is not None:
+            _ = data.wake_up_sound.play(loops=-1)
         ctx.timer(VehicleTimers.INATTENTION).reset(18)
         _reset_inattention_check_timer_and_accumulators(data, ctx)
 
