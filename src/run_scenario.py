@@ -1,19 +1,25 @@
 import os
 import time
-from tkinter import N
-from typing import cast
 from argparse import ArgumentParser
+from typing import cast
 
-from carla import AttachmentType, Client, Image, Location, Rotation, Sensor, Transform, Vehicle
 import pygame
-
-from inattention.detector import WebcamCameraStream
-from pygame_io import PygameIO
-from remove_vehicles_and_sensors import remove_vehicles_and_sensors
-from vehicle_logging_config import VehicleLoggingConfig
-from vehicle_state_machine import VehicleParams, VehicleStateMachine
+from carla import (
+    AttachmentType,
+    Client,
+    Image,
+    Location,
+    Rotation,
+    Sensor,
+    Transform,
+    Vehicle,
+)
 
 import scenarios
+from inattention.detector import WebcamCameraStream
+from pygame_io import PygameIO
+from vehicle_logging_config import VehicleLoggingConfig
+from vehicle_state_machine import VehicleParams, VehicleStateMachine
 
 parser = ArgumentParser("run_scenario")
 _ = parser.add_argument(
@@ -29,6 +35,7 @@ _ = parser.add_argument(
 )
 args = parser.parse_args()
 
+
 def choose_scenario(i: int | None) -> scenarios.Scenario:
     if i == 2:
         return scenarios.EmptyCurveRoadScenario()
@@ -40,8 +47,9 @@ def choose_scenario(i: int | None) -> scenarios.Scenario:
         return scenarios.TrafficJamScenario()
     return scenarios.EmptyStraightRoadScenario()
 
+
 # Define scenario
-scenario = choose_scenario(args.scenario_index)
+scenario = choose_scenario(cast(int, args.scenario_index))
 
 FRAMERATE = 20
 DT = 1 / FRAMERATE
@@ -79,15 +87,15 @@ blueprint_lib = world.get_blueprint_library()
 vehicle_bp = blueprint_lib.find("vehicle.mercedes.coupe_2020")
 # vehicle_bp = blueprint_lib.filter("vehicle.*")[0]
 camera_bp = blueprint_lib.find("sensor.camera.rgb")
-radar_bp = world.get_blueprint_library().find('sensor.other.radar')
+radar_bp = world.get_blueprint_library().find("sensor.other.radar")
 # Right-side radar calibration
-radar_bp.set_attribute('horizontal_fov', str(85))
-radar_bp.set_attribute('vertical_fov', str(2))
-radar_bp.set_attribute('range', str(SENSORS_MAX_RANGE))
-radar_bp.set_attribute('points_per_second', str(2000))
+radar_bp.set_attribute("horizontal_fov", str(85))
+radar_bp.set_attribute("vertical_fov", str(2))
+radar_bp.set_attribute("range", str(SENSORS_MAX_RANGE))
+radar_bp.set_attribute("points_per_second", str(2000))
 radar_location = Location(x=2.0, z=0.2)
 radar_rotation = Rotation(yaw=50)
-radar_transform = Transform(radar_location,radar_rotation)
+radar_transform = Transform(radar_location, radar_rotation)
 
 pygame_window_width = camera_bp.get_attribute("image_size_x").as_int()
 pygame_window_height = camera_bp.get_attribute("image_size_y").as_int()
@@ -103,7 +111,6 @@ try:
 
     # Load scenario
     scenario.load(client, vehicle)
-
 
     if USE_PYGAME_CAMERA:
         camera = cast(Sensor, world.spawn_actor(camera_bp, Transform()))
@@ -139,11 +146,13 @@ try:
         ),
         driver_camera_stream=driver_camera_stream,
         front_radar=front_radar,
-        wake_up_sound=pygame.mixer.Sound(args.wake_up_sound),
+        wake_up_sound=pygame.mixer.Sound(cast(str, args.wake_up_sound)),
         logging_config=VehicleLoggingConfig(log_entries=True),
     )
 
-    def move_to_with_local_offsets(target:Transform, location_offset: Location,rotation_offset: Rotation):
+    def move_to_with_local_offsets(
+        target: Transform, location_offset: Location, rotation_offset: Rotation
+    ):
         target = vehicle.get_transform()
         computed_rotation = target.rotation
         computed_rotation.pitch += rotation_offset.pitch
