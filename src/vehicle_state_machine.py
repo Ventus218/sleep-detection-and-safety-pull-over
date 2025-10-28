@@ -66,7 +66,7 @@ class VehicleParams:
     pull_over_potential_field_coeff: float = 1.35
     road_margin_repulsive_potential_field_coeff: float = 2
 
-    inattention_check_interval: float = 1
+    inattention_check_interval: float = 2
     """
     Interval in seconds at which check the driver attention.
     It is used to perform the check over accumulated data instead
