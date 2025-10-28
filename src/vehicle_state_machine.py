@@ -66,6 +66,20 @@ class VehicleParams:
     pull_over_potential_field_coeff: float = 1.35
     road_margin_repulsive_potential_field_coeff: float = 2
 
+    inattention_check_interval: float = 1
+    """
+    Interval in seconds at which check the driver attention.
+    It is used to perform the check over accumulated data instead
+    of performing it each frame which is less effective.
+    """
+
+    attention_time_percentage: float = 0.7
+    """
+    A percentage representing the amount of time that the driver needs
+    to be paying attention in order to be considered to be paying attention.
+    Valid values are >= 0 and <= 1
+    """
+
     @property
     def max_pull_over_preparation_speed_kmh(self) -> float:
         """
@@ -113,6 +127,16 @@ class VehicleData:
     """
     Distance from the first detected junction.
     If None it means that no junction has beed detected within the sensor range
+    """
+    inattention_time: float = 0
+    """
+    Accumulates the amount of time (seconds) in which the driver is 
+    not paying attention to the road
+    """
+    attention_time: float = 0
+    """
+    Accumulates the amount of time (seconds) in which the driver is 
+    paying attention to the road
     """
 
     @property
@@ -165,7 +189,7 @@ class VehicleData:
         self.pygame_io = pygame_io
         self.manual_control = PygameVehicleControl(vehicle)
         self.inattention_detector = InattentionDetector(
-            driver_camera_stream, eye_threshold=0.20
+            driver_camera_stream, eye_threshold=0.23
         )
         offset = float(vehicle.bounding_box.extent.y)
         self.obstacles_detector = SafePulloverChecker(
@@ -187,7 +211,7 @@ class PullOverSafety(StrEnum):
 
 class VehicleTimers(StrEnum):
     INATTENTION = auto()
-    INATTENTION_TOLERANCE = auto()
+    INATTENTION_CHECK = auto()
 
 
 type VehicleContext = Context[VehicleTimers]
@@ -386,6 +410,13 @@ class LaneKeepingS(VehicleState):
         data.vehicle.set_autopilot(True, data.traffic_manager.get_port())
 
     @override
+    def on_do(self, data: VehicleData, ctx: VehicleContext):
+        if data.inattention_detector.detect():
+            data.inattention_time += ctx.dt
+        else:
+            data.attention_time += ctx.dt
+
+    @override
     def on_exit(self, data: VehicleData, ctx: VehicleContext):
         data.vehicle.set_autopilot(False, data.traffic_manager.get_port())
         # The following line fixes a carla bug https://github.com/carla-simulator/carla/issues/7626
@@ -394,8 +425,19 @@ class LaneKeepingS(VehicleState):
         data.vehicle.apply_control(VehicleControl(throttle=0.01))
 
 
+def _reset_inattention_check_timer_and_accumulators(
+    data: VehicleData, ctx: VehicleContext
+):
+    ctx.timer(VehicleTimers.INATTENTION_CHECK).reset(
+        data.params.inattention_check_interval
+    )
+    data.inattention_time = 0
+    data.attention_time = 0
+
+
 def _inattention_detected(data: VehicleData) -> bool:
-    return data.inattention_detector.detect()
+    tot = data.inattention_time + data.attention_time
+    return data.attention_time < tot * data.params.attention_time_percentage
 
 
 class NoInattentionDetectedS(VehicleState):
@@ -405,8 +447,9 @@ class NoInattentionDetectedS(VehicleState):
             VehicleTransition(
                 to=InattentionDetectedS(),
                 condition=lambda data, ctx: ctx.timer(
-                    VehicleTimers.INATTENTION_TOLERANCE
-                ).is_elapsed(),
+                    VehicleTimers.INATTENTION_CHECK
+                ).is_elapsed()
+                and _inattention_detected(data),
             )
         ]
 
@@ -414,16 +457,16 @@ class NoInattentionDetectedS(VehicleState):
     def actions(self) -> list[VehicleStateAction]:
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: not _inattention_detected(data),
-                action=lambda data, ctx: ctx.timer(
-                    VehicleTimers.INATTENTION_TOLERANCE
-                ).reset(),
+                condition=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_CHECK
+                ).is_elapsed(),
+                action=_reset_inattention_check_timer_and_accumulators,
             ),
         ]
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
-        ctx.timer(VehicleTimers.INATTENTION_TOLERANCE).reset(2)
+        _reset_inattention_check_timer_and_accumulators(data, ctx)
 
 
 class InattentionDetectedS(VehicleState):
@@ -433,8 +476,9 @@ class InattentionDetectedS(VehicleState):
             VehicleTransition(
                 to=NoInattentionDetectedS(),
                 condition=lambda data, ctx: ctx.timer(
-                    VehicleTimers.INATTENTION_TOLERANCE
-                ).is_elapsed(),
+                    VehicleTimers.INATTENTION_CHECK
+                ).is_elapsed()
+                and not _inattention_detected(data),
             ),
             VehicleTransition(
                 to=PullOverPreparationS(),
@@ -448,17 +492,17 @@ class InattentionDetectedS(VehicleState):
     def actions(self) -> list[VehicleStateAction]:
         return [
             VehicleStateAction(
-                condition=lambda data, ctx: _inattention_detected(data),
-                action=lambda data, ctx: ctx.timer(
-                    VehicleTimers.INATTENTION_TOLERANCE
-                ).reset(),
+                condition=lambda data, ctx: ctx.timer(
+                    VehicleTimers.INATTENTION_CHECK
+                ).is_elapsed(),
+                action=_reset_inattention_check_timer_and_accumulators,
             ),
         ]
 
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         ctx.timer(VehicleTimers.INATTENTION).reset(18)
-        ctx.timer(VehicleTimers.INATTENTION_TOLERANCE).reset()
+        _reset_inattention_check_timer_and_accumulators(data, ctx)
 
 
 def _pull_over_is_safe(data: VehicleData) -> PullOverSafety:
