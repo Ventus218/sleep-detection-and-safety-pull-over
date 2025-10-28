@@ -195,7 +195,7 @@ class VehicleData:
         self.obstacles_detector = SafePulloverChecker(
             radar_sensor=front_radar,
             vehicle=vehicle,
-            min_inliers = 2,
+            min_inliers=2,
             scanned_area_x_offset=offset,
             debug=True,
         )
@@ -655,7 +655,9 @@ class PullOverPreparationS(VehicleState):
     @override
     def on_entry(self, data: VehicleData, ctx: VehicleContext):
         light_state = data.vehicle.get_light_state()
-        data.vehicle.set_light_state(VehicleLightState(light_state | VehicleLightState.RightBlinker))
+        data.vehicle.set_light_state(
+            VehicleLightState(light_state | VehicleLightState.RightBlinker)
+        )
         data.traffic_manager.set_desired_speed(
             data.vehicle,
             min(data.params.max_pull_over_preparation_speed_kmh, data.speed_kmh),
