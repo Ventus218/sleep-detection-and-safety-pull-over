@@ -106,10 +106,9 @@ We exploit a long range radar pointing forward with a slight tilt on the right i
 
 1. The camera need to have a free line of sight on the emergency lane line for X meters ahead of the vehicle (X meters is the minimum distance for the vehicle to be able to stop safely and gently)
 2. If the line is not continous throughout all the X meters we assume there is a nearby entry or exit -> NOT SAFE
-3. The radar projects multiple points on the ground ahead for X meters (and slightly on the right) of the vehicle.
-4. We only consider points which distance from the lane marking is about the width of the vehicle (a bit more). This allows us to allow slimmer vehicles to pull over even if the emergency lane il smaller in width.
-5. We measure the height of each considered point from the ground (approximating it with a plane).
-6. If there are multiple points which distance from the plane is relevantly high, we then assume that there is some obstacle in the emergency lane -> NOT SAFE.
+3. The radar projects multiple points ahead for X meters and on the right of the vehicle.
+4. We only consider points which distance from the lane marking is approximately the width of the vehicle (a bit more). This allows us to allow slimmer vehicles to pull over even if the emergency lane il smaller in width.
+5. If the radar doesn't detect anything, then the pullover is safe. Otherwise, there might be an obstacle -> NOT SAFE.
 
 If the vehicle in front is really close to the ego vehicle it may obstruct the radar making it impossible to see the full emergency lane.
 In order to mitigate this problem the vehicle will gently shift to the right
@@ -130,7 +129,7 @@ reaching the lane marking.
 2. If the line is not continous throughout all the X meters we assume there is a nearby entry or exit -> NOT SAFE
 3. Now that we have a solid white line we ensure there is enough space for the vehicle to pull over (the emergency lane is wide enough).
 4. We consider all the sensed points on the other side of the white line and then we only
-   consider points which distance from the line (the sensor can give us 3D coorinates of the line) is about the width of the vehicle (a bit more).
+   consider points which distance from the line (the sensor can give us 3D coordinates of the line) is about the width of the vehicle (a bit more).
 5. We measure the height of each considered point from the ground (approximating it with a plane).
 6. If there are multiple points which distance from the plane is relevantly high, we then assume that there is some obstacle in the emergency lane -> NOT SAFE.
 
@@ -178,6 +177,8 @@ In this way it is possible to achieve a pull over that:
 An important aspect to consider is the method used to detect driver inattention. The goal is to reliably determine whether the driver is focused on the road and to notify the system of their condition.
 
 This is accomplished using a fast and reliable classifier capable of distinguishing between open and closed eyes. Of course, simply detecting closed eyes is not sufficient to conclude that the driver is drowsy. Instead, this detection is monitored over time: a driver is considered drowsy if their eyes remain closed (or undetected) for a continuous period.
+
+The classifier is reused from a project for the exam of *Artificial Vision*. The link to the full project is [this one](https://colab.research.google.com/drive/1C0jCgllFsKzQqjKye22sLj6kz_CnbOdb?usp=sharing).
 
 In this project, the problem is divided into two main stages: **eye detection** and **state classification**. The most logical strategy involves first detecting the eyes using a detection algorithm, then using the results to train a classifier that distinguishes between open and closed eyes.
 
