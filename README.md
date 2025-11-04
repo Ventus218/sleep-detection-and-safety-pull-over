@@ -107,6 +107,10 @@ We exploit a long range radar pointing forward with a slight tilt on the right i
 5. We measure the height of each considered point from the ground (approximating it with a plane).
 6. If there are multiple points which distance from the plane is relevantly high, we then assume that there is some obstacle in the emergency lane -> NOT SAFE.
 
+If the vehicle in front is really close to the ego vehicle it may obstruct the radar making it impossible to see the full emergency lane.
+In order to mitigate this problem the vehicle will gently shift to the right
+reaching the lane marking.
+
 #### Pros
 - Cheaper sensors
 
