@@ -15,24 +15,55 @@ Since the described behavior would require the vehicle to safely change lanes to
 
 The vehicle’s cruise control system is designed to operate only in the slowest lane (already adjacent to the emergency lane).
 
-## Setup
+## Usage
 
-### Virtual environment
+### Setup virtual environment
 
 ```sh
 conda create -p ./.venv python=3.12
 conda activate ./.venv
 ```
 
-### Requirements
+### Install requirements
 
 ```sh
 pip install -r requirements.txt
 ```
 
-### How to update typings
+### Run
+```sh
+python ./src/run_scenario.py --help
+# Will print all the available scenarios to showcase our system along their id
 
-[carla-python-stubs](https://github.com/aasewold/carla-python-stubs/releases/tag/0.9.15)
+# Even though it is not necessary for testing, our system requires a webcam.
+# You should specify which one to use when running a scenario.
+# Here is how you can list all the connected webcams.
+ls /dev/video*
+# /dev/video0 /dev/video1 /dev/video2
+
+# camera_device can be the specific device file (ex: /dev/video1) or just the
+# index of the device (ex: 2)
+python ./src/run_scenario.py -camera_device <camera_device> <scenario_id>
+# Will run the appropriate scenario
+
+^C # To stop the scenario
+```
+
+A black window will pop up, in order to send any keystroke to the simulator you 
+must have that window in focus.
+
+|Key|Action|
+|-|-|
+|m|Go into manual driving|
+|arrow keys|Control the vehicle while in manual driving mode|
+|c|Activate adaptive cruise control|
+|p|Force a pull over (even if the driver is conscious|
+
+We do not support driving wheel controls as our system is supposed to work when
+the driver is not directly controlling the vehicle.
+
+We used the simulator spectator as the main camera, we choose to do so in order
+to ease development by reducing the load on the hardware.
 
 ## Solution
 
