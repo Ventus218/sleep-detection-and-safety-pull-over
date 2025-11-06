@@ -105,6 +105,7 @@ marking.
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Cheaper sensors | Harder to detect a safe pull over spot with high confidence (may result in missing some safe pull over spots)                                                            |
 |                 | Harder to detect a safe pull over spot in turning roads (it can still be achieved but it requires the vehicle to slow down to a lower speed when searching for the spot) |
+|                 | Does not work in case of scarse visibility                                                                                                                               |
 
 #### Semantic lidar approach
 
@@ -129,6 +130,7 @@ marking.
 | -------------------------------------------------------------------- | -------------------------- |
 | More resilient on turning roads, even at higher speeds               | Extremely expensive sensor |
 | Higher capability of detecting a safe pull over spot with confidence |                            |
+| Works even in case of scarse visibility                              |                            |
 
 We finally decided to apply the first approach in order to make our system
 easier to deploy on cheaper vehicles.
