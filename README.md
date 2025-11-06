@@ -22,6 +22,16 @@ adopt the following simplifying assumption:
 The vehicle’s cruise control system is designed to operate only in the slowest
 lane (already adjacent to the emergency lane).
 
+## Motivations
+
+Many manifacturers when providing some kind of autonomous driving (in our case
+an adaptive cruise control with lane-keeping functionality) require the driver
+to be responsible for the vehicle.
+
+We want to provide a system that can enforce this requirement by trying to wake
+up a drowsy driver or if that is not possible to bring the vehicle to a safe
+stop in the shortest amount of time possible.
+
 ## Analisys
 
 We detect driver drowsiness or more generally inattention by leveraging an
