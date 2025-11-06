@@ -144,6 +144,8 @@ Coloured dots represent the kind of situations those sensors want to detect.
 
 <img src="./doc/sensors.png" style="height: 800px"/>
 
+The radar should be placed roughly at 20 cm from the ground.
+
 Regarding the internal camera framing the driver face it should be positioned
 near the sun visor in front of him, resulting in an image feed like the
 following.
@@ -153,6 +155,30 @@ following.
 > In order to keep the workload of this project between the bounds imposed we
 > did not actually use a camera for detecting the emergency lane and any
 > eventual exit/entry. We used CARLA's API instead to emulate that.
+
+### Sensors specifications
+
+#### Radar
+
+| Parameter         | Value |
+| ----------------- | ----- |
+| horizontal fov    | 85°   |
+| vertical fov      | 2°    |
+| points per second | 2000  |
+
+We do not require a minimum range as the algorithm is able to adapt to the
+installed sensor range.
+
+#### Driver camera
+
+We require a minimum resolution of 700x400px
+
+#### Front facing camera
+
+We require that the camera is able to identify lane markings.
+
+We do not require a minimum range as the algorithm is able to adapt to the
+installed sensor range.
 
 ### Flexible, smooth and robust pullover
 
