@@ -1,11 +1,41 @@
 # Sleep detection and safety pull over
 
+<!-- toc -->
+
+- [Developers](#developers)
+- [Introduction](#introduction)
+- [Motivations](#motivations)
+- [Requirements](#requirements)
+- [Analisys](#analisys)
+- [Design](#design)
+  - [Safe pull over spot detection](#safe-pull-over-spot-detection)
+    - [Camera and radar approach](#camera-and-radar-approach)
+    - [Semantic LiDAR approach](#semantic-lidar-approach)
+- [Implementation](#implementation)
+  - [Sensors positioning](#sensors-positioning)
+  - [Sensors specifications](#sensors-specifications)
+    - [Radar](#radar)
+    - [Driver camera](#driver-camera)
+    - [Front facing camera](#front-facing-camera)
+  - [Flexible, smooth and robust pullover](#flexible-smooth-and-robust-pullover)
+  - [Driver inattention detection](#driver-inattention-detection)
+- [Testing](#testing)
+- [Conclusions](#conclusions)
+  - [Edge cases](#edge-cases)
+  - [Future work and enhancements](#future-work-and-enhancements)
+- [Usage](#usage)
+  - [Setup virtual environment](#setup-virtual-environment)
+  - [Install requirements](#install-requirements)
+  - [Run](#run)
+
+<!-- tocstop -->
+
 ## Developers
 
 - Michele Ravaioli
 - Alessandro Venturini
 
-## Abstract
+## Introduction
 
 We propose a vehicle equipped with an adaptive cruise control system that
 includes highway lane-keeping functionality (which, for safety reasons, requires
@@ -31,6 +61,20 @@ to be responsible for the vehicle.
 We want to provide a system that can enforce this requirement by trying to wake
 up a drowsy driver or if that is not possible to bring the vehicle to a safe
 stop in the shortest amount of time possible.
+
+## Requirements
+
+The ego vehicle should:
+
+- avoid obstacles in the emergency lane
+- avoid stopping at entries or exits
+- pull over to the emergency lane if the driver is not paying attention for a
+  continous amount of time
+- be correctly positioned inside the emergency lane
+- try to wake up the driver before starting to pull over
+- inform other vehicles about the situation (by using blinkers)
+- decelerate gently (maximum of -2 m/s^2)
+- allow the driver to re-gain control over the vehicle
 
 ## Analisys
 
@@ -107,7 +151,7 @@ marking.
 |                 | Harder to detect a safe pull over spot in turning roads (it can still be achieved but it requires the vehicle to slow down to a lower speed when searching for the spot) |
 |                 | Does not work in case of scarse visibility                                                                                                                               |
 
-#### Semantic lidar approach
+#### Semantic LiDAR approach
 
 1. The sensor need to have a free line of sight on the emergency lane line for X
    meters ahead of the vehicle (X meters is the minimum distance for the vehicle
@@ -303,7 +347,9 @@ not experience any failure or crash.
 > speed of the ego vehicle because the autopilot was not able to keep a steady
 > speed when following another vehicle
 
-## Edge cases
+## Conclusions
+
+### Edge cases
 
 There are some edge cases that we did not cover due to time constraints:
 
@@ -312,12 +358,20 @@ There are some edge cases that we did not cover due to time constraints:
   the radar has surpassed the obstacle resulting in the obstacle being hit. This
   issue can be easilly solved by complementing the main radar with a short range
   radar on the side of the vehicle.
+
+### Future work and enhancements
+
+- It is possible to follow the LiDAR approach and see if it is actually performs
+  better
+
 - It can happen sometimes that the vehicle will take a higher amount of space
   before completely stopping and this can result in hitting an obstacle in the
   emergency lane.
 
   This is due to the fact that we were not able to tune the PID controller which
   is a very time consuming task.
+
+  Additional work on this aspect would greatly increase out system quality.
 
 ## Usage
 
