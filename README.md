@@ -257,6 +257,12 @@ There are some edge cases that we did not cover due to time constraints:
   the radar has surpassed the obstacle resulting in the obstacle being hit. This
   issue can be easilly solved by complementing the main radar with a short range
   radar on the side of the vehicle.
+- It can happen sometimes that the vehicle will take a higher amount of space
+  before completely stopping and this can result in hitting an obstacle in the
+  emergency lane.
+
+  This is due to the fact that we were not able to tune the PID controller which
+  is a very time consuming task.
 
 ## Usage
 
