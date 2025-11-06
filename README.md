@@ -22,58 +22,7 @@ adopt the following simplifying assumption:
 The vehicle’s cruise control system is designed to operate only in the slowest
 lane (already adjacent to the emergency lane).
 
-## Usage
-
-### Setup virtual environment
-
-```sh
-conda create -p ./.venv python=3.12
-conda activate ./.venv
-```
-
-### Install requirements
-
-```sh
-pip install -r requirements.txt
-```
-
-### Run
-
-```sh
-python ./src/run_scenario.py --help
-# Will print all the available scenarios to showcase our system along their id
-
-# Even though it is not necessary for testing, our system requires a webcam.
-# You should specify which one to use when running a scenario.
-# Here is how you can list all the connected webcams.
-ls /dev/video*
-# /dev/video0 /dev/video1 /dev/video2
-
-# camera_device can be the specific device file (ex: /dev/video1) or just the
-# index of the device (ex: 2)
-python ./src/run_scenario.py -camera_device <camera_device> <scenario_id>
-# Will run the appropriate scenario
-
-^C # To stop the scenario
-```
-
-A black window will pop up, in order to send any keystroke to the simulator you
-must have that window in focus.
-
-| Key        | Action                                             |
-| ---------- | -------------------------------------------------- |
-| m          | Go into manual driving                             |
-| arrow keys | Control the vehicle while in manual driving mode   |
-| c          | Activate adaptive cruise control                   |
-| p          | Force a pull over (even if the driver is conscious |
-
-We do not support driving wheel controls as our system is supposed to work when
-the driver is not directly controlling the vehicle.
-
-We used the simulator spectator as the main camera, we choose to do so in order
-to ease development by reducing the load on the hardware.
-
-## Solution
+## Analisys
 
 We detect driver drowsiness or more generally inattention by leveraging an
 artificial vision algorithm based on face detection and analisys.
@@ -92,11 +41,13 @@ that we want the driver to explicitly express the will of taking control of the
 vehicle (it may not be safe to assume that the driver has regained consciousness
 by just detecting some movements on the driving wheel or on the pedals).
 
+## Design
+
 Here is a simplified UML state diagram that shows most of the logic of our
 system, abstracting away implementation details.
 ![Simplified UML state diagram of our solution](doc/state-diagram.png)
 
-## How to detect a safe pull over spot
+### Safe pull over spot detection
 
 We basically need to achieve two goals and combine their results to decide if a
 spot is safe for pulling over.
@@ -114,7 +65,7 @@ below.
 In order to simplify the examples and the implentation of this project we
 decided to assume a right-hand drive context.
 
-### Camera and radar approach
+#### Camera and radar approach
 
 We exploit a forward looking camera in order to detect a continous (no entry or
 exit) lane marking (the emergency lane).
@@ -140,19 +91,12 @@ radar making it impossible to see the full emergency lane. In order to mitigate
 this problem the vehicle will gently shift to the right reaching the lane
 marking.
 
-#### Pros
+| Pros            | Cons                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cheaper sensors | Harder to detect a safe pull over spot with high confidence (may result in missing some safe pull over spots)                                                            |
+|                 | Harder to detect a safe pull over spot in turning roads (it can still be achieved but it requires the vehicle to slow down to a lower speed when searching for the spot) |
 
-- Cheaper sensors
-
-#### Cons
-
-- Harder to detect a safe pull over spot with high confidence (may result in
-  missing some safe pull over spots)
-- Harder to detect a safe pull over spot in turning roads (it can still be
-  achieved but it requires the vehicle to slow down to a lower speed when
-  searching for the spot)
-
-### Semantic lidar approach
+#### Semantic lidar approach
 
 1. The sensor need to have a free line of sight on the emergency lane line for X
    meters ahead of the vehicle (X meters is the minimum distance for the vehicle
@@ -171,19 +115,17 @@ marking.
    high, we then assume that there is some obstacle in the emergency lane -> NOT
    SAFE.
 
-#### Pros
-
-- Higher capability of detecting a safe pull over spot with confidence
-- More resilient on turning roads, even at higher speeds
-
-#### Cons
-
-- Extremely expensive sensor
+| Pros                                                                 | Cons                       |
+| -------------------------------------------------------------------- | -------------------------- |
+| More resilient on turning roads, even at higher speeds               | Extremely expensive sensor |
+| Higher capability of detecting a safe pull over spot with confidence |                            |
 
 We finally decided to apply the first approach in order to make our system
 easier to deploy on cheaper vehicles.
 
-## How we achieve a flexible, smooth and robust pullover
+## Implementation
+
+### Flexible, smooth and robust pullover
 
 There are three main parameters which then allow to compute most of the
 thresholds for the algorihm:
@@ -225,7 +167,7 @@ In this way it is possible to achieve a pull over that:
 - is flexible as the space needed to stop depends on the vehicle speed
 - robust with respect to how much roads can differ from one another
 
-## How to detect driver inattention
+### Driver inattention detection
 
 An important aspect to consider is the method used to detect driver inattention.
 The goal is to reliably determine whether the driver is focused on the road and
@@ -283,3 +225,54 @@ There are some edge cases that we did not cover due to time constraints:
   the radar has surpassed the obstacle resulting in the obstacle being hit. This
   issue can be easilly solved by complementing the main radar with a short range
   radar on the side of the vehicle.
+
+## Usage
+
+### Setup virtual environment
+
+```sh
+conda create -p ./.venv python=3.12
+conda activate ./.venv
+```
+
+### Install requirements
+
+```sh
+pip install -r requirements.txt
+```
+
+### Run
+
+```sh
+python ./src/run_scenario.py --help
+# Will print all the available scenarios to showcase our system along their id
+
+# Even though it is not necessary for testing, our system requires a webcam.
+# You should specify which one to use when running a scenario.
+# Here is how you can list all the connected webcams.
+ls /dev/video*
+# /dev/video0 /dev/video1 /dev/video2
+
+# camera_device can be the specific device file (ex: /dev/video1) or just the
+# index of the device (ex: 2)
+python ./src/run_scenario.py -camera_device <camera_device> <scenario_id>
+# Will run the appropriate scenario
+
+^C # To stop the scenario
+```
+
+A black window will pop up, in order to send any keystroke to the simulator you
+must have that window in focus.
+
+| Key        | Action                                             |
+| ---------- | -------------------------------------------------- |
+| m          | Go into manual driving                             |
+| arrow keys | Control the vehicle while in manual driving mode   |
+| c          | Activate adaptive cruise control                   |
+| p          | Force a pull over (even if the driver is conscious |
+
+We do not support driving wheel controls as our system is supposed to work when
+the driver is not directly controlling the vehicle.
+
+We used the simulator spectator as the main camera, we choose to do so in order
+to ease development by reducing the load on the hardware.
